@@ -1,0 +1,16 @@
+{
+  "name": "wave-vm",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Free and open-source desktop virtualization.",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check:frontend": "node --check src/js/main.js && node --check src/js/api.js && node --check src/js/dom.js && node --check src/js/format.js && node --check src/js/host-view.js"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4"
+  }
+}

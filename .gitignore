@@ -1,0 +1,35 @@
+# Rust build output
+/target/
+/src-tauri/target/
+**/*.rs.bk
+
+# JavaScript dependencies and build output
+/node_modules/
+/dist/
+
+# Tauri-generated ACL schemas
+/src-tauri/gen/
+
+# Package manager caches
+.pnpm-store/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local logs and environment files
+*.log
+.env
+.env.*
+.envrc
+*.local
+
+# Local credentials and keys
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
