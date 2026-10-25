@@ -101,4 +101,9 @@ The Rust backend owns host detection and persistence. The frontend only renders 
 
 ## License
 
-Wave VM is intended to be free and open-source. A license has not yet been selected or added to this repository.
+Wave VM is released under the MIT License. See [`LICENSE`](LICENSE) for the full text.
+
+Copyright (c) 2026 Water.
+
+Third-party dependencies and any separately licensed assets retain their original
+licenses. The MIT License does not override those terms.

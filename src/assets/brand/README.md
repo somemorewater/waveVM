@@ -14,10 +14,10 @@ The website's `wave-vm-icon.svg` is copied to
 platform icons (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.png`,
 `icon.icns`, and `icon.ico`).
 
-These are original Wave VM project assets. The website repository does not
-declare a separate license for its brand assets, and the desktop project has
-not selected a license yet. No third-party font files are bundled: the desktop
-uses the website's Avenir Next / Avenir / Segoe UI system font stack.
+These are original Wave VM project assets, covered by the MIT License in this
+repository unless a separate notice states otherwise. No third-party font files
+are bundled: the desktop uses the website's Avenir Next / Avenir / Segoe UI
+system font stack.
 
 The desktop repository keeps these copies so it can build and run independently
 of the website directory. Do not replace them with symlinks or relative paths
