@@ -1,11 +1,15 @@
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 use crate::config::ConfigError;
+use crate::vm::VmError;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum AppError {
     #[error("{0}")]
     Config(#[from] ConfigError),
+
+    #[error("{0}")]
+    Vm(#[from] VmError),
 
     #[error("background task failed: {0}")]
     Task(String),
@@ -15,6 +19,7 @@ impl AppError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::Config(error) => error.code(),
+            Self::Vm(error) => error.code(),
             Self::Task(_) => "background_task_failed",
         }
     }

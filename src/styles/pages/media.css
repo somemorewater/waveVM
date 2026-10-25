@@ -1,0 +1,128 @@
+.media-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(240px, 0.95fr);
+  gap: clamp(24px, 4vw, 48px);
+  align-items: center;
+  padding: clamp(24px, 3.5vw, 38px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.media-hero-copy {
+  max-width: 620px;
+}
+
+.media-hero h2 {
+  margin-bottom: 10px;
+  font-size: clamp(24px, 2.4vw, 31px);
+}
+
+.media-hero-description {
+  margin-bottom: 18px;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.media-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+
+.media-hero-art {
+  position: relative;
+  display: grid;
+  min-height: 220px;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  overflow: hidden;
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  background: var(--navy-900);
+  color: #f6f5ef;
+}
+
+.media-hero-art::before {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border: 1px solid rgba(218, 233, 226, 0.14);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 28px rgba(218, 233, 226, 0.025),
+    0 0 0 56px rgba(218, 233, 226, 0.018);
+  content: "";
+}
+
+.media-hero-icon {
+  position: relative;
+  color: var(--accent-500);
+}
+
+.media-hero-art-label {
+  position: relative;
+  color: #91a6b3;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.media-planned-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.media-feature {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.media-feature-icon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: var(--surface-muted);
+  color: var(--accent-700);
+}
+
+.media-feature-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.media-feature-head h3 {
+  margin: 0;
+}
+
+.media-feature p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .media-hero,
+  .media-planned-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .media-hero-art {
+    min-height: 180px;
+  }
+}

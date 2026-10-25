@@ -61,6 +61,27 @@ const CHECK_LABELS = {
   error: "Error",
 };
 
+const VM_STATE_LABELS = {
+  stopped: "Stopped",
+  starting: "Starting",
+  running: "Running",
+  stopping: "Stopping",
+  error: "Error",
+};
+
+const VM_STATE_TONES = {
+  stopped: "neutral",
+  starting: "warn",
+  running: "ok",
+  stopping: "warn",
+  error: "error",
+};
+
+const ACCELERATION_LABELS = {
+  kvm: "KVM acceleration",
+  tcg: "TCG software emulation",
+};
+
 export function formatBytes(bytes) {
   if (bytes === undefined || bytes === null || !Number.isFinite(bytes) || bytes < 0) {
     return "Unavailable";
@@ -100,6 +121,43 @@ export function formatTimestamp(timestamp) {
   }).format(new Date(timestamp * 1000));
 }
 
+export function formatRelativeTime(timestamp) {
+  if (!timestamp || !Number.isFinite(timestamp)) {
+    return "Unknown";
+  }
+
+  const seconds = timestamp - Date.now() / 1000;
+  const absolute = Math.abs(seconds);
+
+  if (absolute < 45) {
+    return "just now";
+  }
+
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+  if (absolute < 3600) {
+    return formatter.format(Math.round(seconds / 60), "minute");
+  }
+
+  if (absolute < 86400) {
+    return formatter.format(Math.round(seconds / 3600), "hour");
+  }
+
+  if (absolute < 604800) {
+    return formatter.format(Math.round(seconds / 86400), "day");
+  }
+
+  return formatTimestamp(timestamp);
+}
+
+export function formatMemory(mib) {
+  return `${formatCount(mib)} MiB`;
+}
+
+export function formatDisk(gib) {
+  return `${formatCount(gib)} GiB`;
+}
+
 export function osLabel(os) {
   return OS_LABELS[os] || os || "Unknown";
 }
@@ -134,4 +192,16 @@ export function kvmLabel(status) {
 
 export function checkLabel(status) {
   return CHECK_LABELS[status] || "Unknown";
+}
+
+export function vmStateLabel(state) {
+  return VM_STATE_LABELS[state] || "Unknown";
+}
+
+export function vmStateTone(state) {
+  return VM_STATE_TONES[state] || "neutral";
+}
+
+export function accelerationLabel(value) {
+  return ACCELERATION_LABELS[value] || "Not running";
 }

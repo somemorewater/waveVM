@@ -1,0 +1,35 @@
+.settings-app-region,
+.settings-locations {
+  min-width: 0;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-row-copy {
+  min-width: 0;
+}
+
+.settings-row-copy h3 {
+  margin: 0;
+}
+
+.settings-row-copy p {
+  max-width: 560px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 700px) {
+  .settings-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+}

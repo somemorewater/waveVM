@@ -1,4 +1,4 @@
-import { clear, element, text } from "./dom.js";
+import { element, text } from "../utils/dom.js";
 import {
   checkLabel,
   checkTone,
@@ -11,111 +11,84 @@ import {
   sourceLabel,
   toolLabel,
   toolTone,
-  warningLabel,
-} from "./format.js";
+} from "../utils/format.js";
+import { appendAlert } from "./alerts.js";
+import { skeletonGrid } from "./skeleton.js";
+import { statusIndicator } from "./status-indicator.js";
 
-export function setSummary(node, label, tone) {
-  node.textContent = label;
-  node.dataset.tone = tone;
+const ALL_CARDS = ["system", "kvm", "qemu", "qemuImg", "storage", "localData"];
+
+export function renderHostLoading(container, count = 4) {
+  container.replaceChildren(skeletonGrid(count));
 }
 
-export function renderLoading(panel, summary) {
-  setSummary(summary, "Checking host", "neutral");
-  clear(panel);
-
-  for (let index = 0; index < 4; index += 1) {
-    panel.append(
-      element("div", {
-        className: "skeleton-card",
-        children: [
-          element("span", { className: "skeleton-line skeleton-line-short" }),
-          element("span", { className: "skeleton-line" }),
-          element("span", { className: "skeleton-line skeleton-line-medium" }),
-        ],
-      }),
-    );
-  }
-}
-
-export function renderAppMeta(node, appInfo) {
-  if (appInfo && appInfo.version) {
-    node.textContent = `v${appInfo.version}`;
-  }
-}
-
-export function renderHost(panel, host, appInfo, appInfoError) {
-  clear(panel);
-  panel.setAttribute("aria-busy", "false");
-
-  panel.append(
-    systemCard(host),
-    kvmCard(host.kvm),
-    toolCard(host.qemu, "QEMU system emulator", "Runtime executable"),
-    toolCard(host.qemuImg, "qemu-img", "Disk image utility"),
-    storageCard(host.storage),
-    localDataCard(appInfo, appInfoError),
-  );
-
-  const summary = summarize(host.warnings, appInfoError);
-  setSummary(document.querySelector("#host-summary"), summary.label, summary.tone);
-
-  const alertRegion = document.querySelector("#global-alert");
-  renderWarnings(alertRegion, host.warnings);
-  if (appInfoError) {
-    appendAlert(alertRegion, {
-      severity: "error",
-      title: "Local configuration unavailable",
-      message: `${appInfoError.message} (${appInfoError.code})`,
+export function renderHostCards(
+  container,
+  { host, appInfo, appInfoError, include = ALL_CARDS },
+) {
+  if (!host) {
+    renderHostError(container, {
+      code: "host_unavailable",
+      message: "Host diagnostics have not returned data.",
     });
+    return;
   }
+
+  const cards = [];
+
+  if (include.includes("system")) {
+    cards.push(systemCard(host));
+  }
+  if (include.includes("kvm")) {
+    cards.push(kvmCard(host.kvm));
+  }
+  if (include.includes("qemu")) {
+    cards.push(toolCard(host.qemu, "QEMU system emulator", "Runtime executable"));
+  }
+  if (include.includes("qemuImg")) {
+    cards.push(toolCard(host.qemuImg, "qemu-img", "Disk image utility"));
+  }
+  if (include.includes("storage")) {
+    cards.push(storageCard(host.storage));
+  }
+  if (include.includes("localData")) {
+    cards.push(localDataCard(appInfo, appInfoError));
+  }
+
+  container.replaceChildren(...cards);
 }
 
-export function renderHostError(panel, error, alertRegion, appInfoError) {
-  clear(panel);
-  panel.setAttribute("aria-busy", "false");
-
-  panel.append(
+export function renderHostError(container, error) {
+  container.replaceChildren(
     element("div", {
       className: "error-card",
       children: [
         element("h3", { text: "Host diagnostics could not be completed" }),
         element("p", { text: error.message }),
-        element("p", { className: "error-code", text: `Error code: ${error.code}` }),
+        element("p", {
+          className: "error-code",
+          text: `Error code: ${error.code}`,
+        }),
       ],
     }),
   );
-
-  setSummary(document.querySelector("#host-summary"), "Diagnostics failed", "error");
-  clear(alertRegion);
-  appendAlert(alertRegion, {
-    severity: "error",
-    title: "Host diagnostics failed",
-    message: error.message,
-  });
-
-  if (appInfoError) {
-    appendAlert(alertRegion, {
-      severity: "error",
-      title: "Local configuration unavailable",
-      message: `${appInfoError.message} (${appInfoError.code})`,
-    });
-  }
 }
 
-function summarize(warnings, appInfoError) {
-  const list = Array.isArray(warnings) ? warnings : [];
-  const hasError = Boolean(appInfoError) || list.some((item) => item.severity === "error");
-  const hasWarning = list.some((item) => item.severity === "warning");
+export function appendHostWarnings(container, host, appInfoError) {
+  const warnings = Array.isArray(host?.warnings) ? host.warnings : [];
 
-  if (hasError) {
-    return { label: "Attention needed", tone: "error" };
+  for (const warning of warnings) {
+    appendAlert(container, warning);
   }
 
-  if (hasWarning) {
-    return { label: "Setup incomplete", tone: "warn" };
+  if (appInfoError) {
+    appendAlert(container, {
+      severity: "error",
+      title: "Local configuration unavailable",
+      message: appInfoError.message,
+      code: appInfoError.code,
+    });
   }
-
-  return { label: "Diagnostics complete", tone: "ok" };
 }
 
 function systemCard(host) {
@@ -139,9 +112,10 @@ function systemCard(host) {
       { label: "Architecture", value: host.arch, code: true },
       {
         label: "Logical CPUs",
-        value: host.cpuLogical === null || host.cpuLogical === undefined
-          ? "Unavailable"
-          : formatCount(host.cpuLogical),
+        value:
+          host.cpuLogical === null || host.cpuLogical === undefined
+            ? "Unavailable"
+            : formatCount(host.cpuLogical),
         muted: host.cpuLogical === null || host.cpuLogical === undefined,
       },
       { label: "Memory", value: memoryValue },
@@ -152,7 +126,10 @@ function systemCard(host) {
         ? null
         : {
             tone: checkTone(memory.status),
-            message: text(memory.detail, "Memory information is not available on this host."),
+            message: text(
+              memory.detail,
+              "Memory information is not available on this host.",
+            ),
           },
   });
 }
@@ -176,7 +153,11 @@ function kvmCard(kvm) {
     },
     rows: [
       { label: "Device", value: kvm.devicePath, code: true },
-      { label: "Present", value: kvm.devicePresent ? "Yes" : "No", muted: !kvm.devicePresent },
+      {
+        label: "Present",
+        value: kvm.devicePresent ? "Yes" : "No",
+        muted: !kvm.devicePresent,
+      },
       {
         label: "Verified",
         value: kvm.verified ? "Yes, kernel accepted the probe" : "No",
@@ -184,9 +165,10 @@ function kvmCard(kvm) {
       },
       {
         label: "API version",
-        value: kvm.apiVersion === null || kvm.apiVersion === undefined
-          ? "Not reported"
-          : formatCount(kvm.apiVersion),
+        value:
+          kvm.apiVersion === null || kvm.apiVersion === undefined
+            ? "Not reported"
+            : formatCount(kvm.apiVersion),
         muted: kvm.apiVersion === null || kvm.apiVersion === undefined,
       },
     ],
@@ -199,7 +181,11 @@ function kvmCard(kvm) {
 
 function toolCard(tool, title, kicker) {
   const rows = [
-    { label: "Executable", value: text(tool.executable, "Not selected"), code: true },
+    {
+      label: "Executable",
+      value: text(tool.executable, "Not selected"),
+      code: true,
+    },
     {
       label: "Version",
       value: text(tool.version, "Not reported"),
@@ -275,7 +261,10 @@ function storageCard(storage) {
         ? null
         : {
             tone: noteTone,
-            message: text(storage.detail, "Storage information is not available on this host."),
+            message: text(
+              storage.detail,
+              "Storage information is not available on this host.",
+            ),
           },
   });
 }
@@ -336,14 +325,12 @@ function hostCard({ title, kicker, badge, rows, note, wide = false }) {
       element("div", {
         children: [
           element("h3", { text: title }),
-          kicker ? element("p", { className: "host-card-kicker", text: kicker }) : null,
+          kicker
+            ? element("p", { className: "host-card-kicker", text: kicker })
+            : null,
         ],
       }),
-      badge ? element("span", {
-        className: "badge",
-        text: badge.label,
-        attrs: { "data-tone": badge.tone },
-      }) : null,
+      badge ? statusIndicator(badge) : null,
     ],
   });
 
@@ -389,45 +376,4 @@ function detailRow({ label, value, code = false, muted = false }) {
       }),
     ],
   });
-}
-
-function renderWarnings(container, warnings) {
-  clear(container);
-  const list = Array.isArray(warnings) ? warnings : [];
-
-  for (const warning of list) {
-    appendAlert(container, warning);
-  }
-}
-
-function appendAlert(container, warning) {
-  const severity = warning.severity || "info";
-  container.append(
-    element("div", {
-      className: "alert",
-      attrs: {
-        "data-severity": severity,
-        role: "status",
-      },
-      children: [
-        element("span", {
-          className: "alert-label",
-          text: warningLabel(severity),
-        }),
-        element("div", {
-          className: "alert-copy",
-          children: [
-            element("span", {
-              className: "alert-title",
-              text: text(warning.title, "Host notice"),
-            }),
-            element("span", {
-              className: "alert-message",
-              text: text(warning.message, "No additional detail was provided."),
-            }),
-          ],
-        }),
-      ],
-    }),
-  );
 }

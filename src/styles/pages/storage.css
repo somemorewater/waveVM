@@ -1,0 +1,12 @@
+.storage-disk-region,
+.storage-locations {
+  min-width: 0;
+}
+
+.storage-disk-region .data-table td:first-child a {
+  font-weight: 650;
+}
+
+.storage-disk-region .data-table td:nth-child(2) {
+  min-width: 220px;
+}

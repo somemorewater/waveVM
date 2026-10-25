@@ -8,7 +8,7 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
-    "check:frontend": "node --check src/js/main.js && node --check src/js/api.js && node --check src/js/dom.js && node --check src/js/format.js && node --check src/js/host-view.js"
+    "check:frontend": "find src -name '*.js' -print0 | xargs -0 -n1 node --check"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.4"

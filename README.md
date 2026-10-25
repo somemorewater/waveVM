@@ -2,22 +2,30 @@
 
 **Ride your own systems.**
 
-Wave VM is a free, open-source desktop application for creating and managing virtual machines locally. It is built with Tauri 2, Rust, and vanilla HTML/CSS/JavaScript, with direct QEMU integration planned.
+Wave VM is a free, open-source desktop application for creating and managing virtual machines locally. It is built with Tauri 2, Rust, and vanilla HTML/CSS/JavaScript, with direct QEMU integration.
 
 ## Current status
 
-This is **Milestone 1A: Desktop Foundation**. It provides a real application shell, live host diagnostics, QEMU discovery, and versioned local configuration.
+This is **Milestone 2: First Real VM Lifecycle**. It builds on the desktop foundation with real VM configuration, QCOW2 disk creation, QEMU process start/stop, persistent VM definitions, accurate lifecycle state, and a genuine guest console for running machines.
 
-Wave VM **cannot create or run virtual machines yet**. VM definitions, disks, QMP control, and the graphical console are intentionally not part of this milestone. The interface labels future functionality rather than pretending it exists.
+Wave VM **cannot install or boot a guest operating system yet**. ISO handling, image downloads, networking, USB passthrough, and snapshots are intentionally not part of this milestone. A configured disk is blank until an operating system is installed in a later milestone. A running machine can still be opened in the console view, which displays the actual guest framebuffer over loopback-only QEMU VNC.
 
 ## What works
 
 - Tauri 2 desktop shell with a vanilla frontend.
+- A persistent multi-page workspace with Dashboard, Virtual machines, Storage, Installation media, and Settings pages, hash-based navigation, and shared host and machine state.
 - Host diagnostics from Rust: operating system, architecture, logical CPU count, memory, and free space on the application data filesystem.
 - QEMU and `qemu-img` discovery through bundled resources, `PATH`, and standard platform locations, including version probing.
 - KVM probing on Linux by opening `/dev/kvm` and issuing `KVM_GET_API_VERSION`. The presence of the device alone is not treated as proof of usability.
-- Versioned `config.json` stored in the platform application data directory, written atomically with restrictive permissions on Unix.
-- A reserved `vms/` directory for future VM definitions.
+- Creating VM definitions with validated names, memory, virtual CPU counts, guest architecture, and disk size.
+- Creating a thin-provisioned QCOW2 disk with `qemu-img`. Existing disks are never overwritten.
+- Starting a real QEMU process with the configured resources, KVM when verified usable, and a TCG fallback.
+- QMP lifecycle control over a private Unix socket. The guest console uses QEMU VNC bound to `127.0.0.1` with a per-run password; no public QMP endpoint or guest network device is exposed.
+- An interactive guest console using QEMU's WebSocket VNC transport and bundled noVNC 1.7.0. The WebSocket port is discovered through QMP, and the console password is generated per run and kept in memory only.
+- Stopping a VM with `system_powerdown`, a QMP `quit` fallback, and bounded process termination fallbacks.
+- Tracking the child process, preventing duplicate launches, detecting unexpected exits through polling, and reconciling persisted state.
+- Versioned `config.json` stored in the platform application data directory, written atomically with restrictive permissions on Unix. Schema version 2 stores VM definitions.
+- A `vms/` directory containing each machine's disk and QEMU log.
 
 ## Brand assets
 
@@ -32,8 +40,8 @@ or depend on the website repository at build time or runtime.
 - Rust stable and Cargo.
 - Node.js 20+ and npm for the Tauri CLI.
 - Tauri 2 Linux prerequisites, including WebKitGTK 4.1, GTK 3, and libsoup 3. On Arch Linux the relevant packages are `webkit2gtk-4.1`, `gtk3`, and `libsoup3`.
-- Optional: QEMU for meaningful QEMU diagnostics.
-- Optional: an accessible `/dev/kvm` device for KVM diagnostics.
+- QEMU and `qemu-img` for VM disk creation and process lifecycle operations. The console requires a QEMU build with WebSocket VNC support; this environment was verified with QEMU 11.1.2.
+- Optional: an accessible `/dev/kvm` device for KVM acceleration. Without it, QEMU uses software emulation (TCG).
 
 Wave VM never requires root. It does not install drivers, change group membership, or modify host configuration.
 
@@ -68,35 +76,52 @@ Tauri resolves the application data directory from the bundle identifier `com.wa
 The application creates:
 
 ```text
-config.json   # versioned application configuration
-vms/          # reserved for future VM definitions and disks
+config.json             # versioned application configuration (schema v2)
+vms/<machine-id>/       # one directory per machine
+  disk.qcow2            # blank QCOW2 virtual disk
+  qemu.log              # latest QEMU run log
 ```
 
-Configuration writes use a temporary file in the same directory followed by an atomic rename. The `vms/` directory is created separately and is never removed by this build.
+Configuration writes use a temporary file in the same directory followed by an atomic rename. The `vms/` directory and VM disks are never removed automatically by this build.
 
 ## Architecture
 
 ```text
-src/                     Vanilla HTML, CSS, and ES modules
-src/assets/brand/        Local Wave VM brand SVGs
+src/
+  app.js                 Application bootstrap, router wiring, page lifecycle
+  router.js              Hash routes and navigation
+  state/                 Shared host, application, and machine state
+  services/              Tauri command wrappers and local preferences
+  components/            Persistent shell and reusable UI
+  pages/                 Dashboard, machines, storage, media, settings
+  styles/                Tokens, global/layout/components, page styles
+  assets/brand/          Local Wave VM brand SVGs
+  vendor/novnc/          Bundled noVNC 1.7.0 client and licenses
 src-tauri/src/
   commands/              Narrow Tauri command handlers
-  config/                Versioned configuration and atomic persistence
+  config/                Versioned configuration, schema migration, atomic persistence
   host/                  Host diagnostics, memory/storage, KVM probe
   qemu/                  Executable discovery, safe version probing
+  qmp/                   Minimal QMP client over a local Unix socket
+  vm/                    VM models, validation, disk creation, process lifecycle
   error.rs               Shared serialized application errors
-  state.rs               Application state initialization
+  state.rs               Application state, tracked QEMU processes, exit cleanup
 ```
 
-The Rust backend owns host detection and persistence. The frontend only renders the structured results and handles interaction. Because the frontend is static and has no bundler, it calls the two registered commands through Tauri's global `window.__TAURI__.core.invoke` bridge; the capability is scoped to the main window.
+The shell and sidebar remain mounted while page modules render into the main outlet. Routes use local hash paths such as `#/dashboard`, `#/machines`, `#/machines/:id`, `#/machines/:id/console`, `#/storage`, `#/media`, and `#/settings`, so browser-style back and forward navigation works without a server.
+
+The Rust backend owns host detection, VM validation, persistence, disk creation, and process lifecycle. The frontend only renders the structured results and handles interaction. Because the frontend is static and has no bundler, it calls the registered commands through Tauri's global `window.__TAURI__.core.invoke` bridge; the capability is scoped to the main window.
 
 ## Known limitations
 
-- No VM creation, disk creation, ISO handling, QMP, networking, or graphical console.
-- Only QEMU system emulator discovery for the host architecture and `qemu-img` are implemented; argument construction and process supervision are not.
-- Linux KVM probing is implemented. Windows WHPX and macOS HVF detection are not implemented or verified.
+- VM lifecycle operations are currently supported on Linux x86_64 only. Other hosts are reported as unsupported before files or processes are created.
+- QEMU and `qemu-img` must be installed for VM operations. The shell still starts and reports their status when they are missing.
+- No guest operating system installation, ISO handling, image downloads, networking, USB passthrough, or snapshots yet. A guest operating system must be installed separately before the console can show a bootable guest.
+- The console depends on QEMU WebSocket VNC support and is available only while the machine is running. It is bound to loopback and protected by a per-run password.
+- KVM acceleration is used only when the probe verifies `/dev/kvm`; otherwise QEMU uses software emulation (TCG) and may be slow.
+- There is no UI for editing or deleting machines. Existing disks and VM directories are preserved.
+- Normal application exit stops tracked QEMU processes. If the desktop process is force-killed, cleanup guarantees do not apply to an already running child process.
 - Windows and macOS host behavior has not been verified in this environment.
-- QEMU is optional for this milestone; when it is not installed, the UI reports it as missing rather than assuming it is available.
 - No installer or packaged release has been produced.
 
 ## License
@@ -106,4 +131,6 @@ Wave VM is released under the MIT License. See [`LICENSE`](LICENSE) for the full
 Copyright (c) 2026 Water.
 
 Third-party dependencies and any separately licensed assets retain their original
-licenses. The MIT License does not override those terms.
+licenses. The MIT License does not override those terms. The bundled noVNC client
+is licensed under the Mozilla Public License 2.0; see
+[`src/vendor/novnc/LICENSE.txt`](src/vendor/novnc/LICENSE.txt).

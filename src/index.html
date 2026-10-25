@@ -3,199 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#0B2A4A" />
     <title>Wave VM</title>
     <link rel="icon" href="./assets/brand/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css" />
-    <script type="module" src="./js/main.js"></script>
+    <link rel="stylesheet" href="./styles/tokens.css" />
+    <link rel="stylesheet" href="./styles/global.css" />
+    <link rel="stylesheet" href="./styles/layout.css" />
+    <link rel="stylesheet" href="./styles/components.css" />
+    <link rel="stylesheet" href="./styles/pages/dashboard.css" />
+    <link rel="stylesheet" href="./styles/pages/machines.css" />
+    <link rel="stylesheet" href="./styles/pages/storage.css" />
+    <link rel="stylesheet" href="./styles/pages/media.css" />
+    <link rel="stylesheet" href="./styles/pages/settings.css" />
+    <script type="module" src="./app.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
-
-    <div class="app-shell">
-      <aside class="sidebar">
-        <a class="brand" href="#machines" aria-label="Wave VM home">
-          <img
-            class="brand-wordmark"
-            src="./assets/brand/wave-vm-wordmark-white.svg"
-            alt=""
-            width="344"
-            height="84"
-          />
-          <span class="brand-tagline">Ride your own systems.</span>
-        </a>
-
-        <nav class="primary-nav" aria-label="Primary">
-          <a class="nav-link is-active" href="#machines" aria-current="page">
-            <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-              <rect x="3.5" y="5" width="17" height="12" rx="2" stroke="currentColor" stroke-width="1.7" />
-              <path d="M8 20h8M12 17v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-            </svg>
-            <span>Machines</span>
-          </a>
-          <a class="nav-link" href="#host-readiness">
-            <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-              <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.7" />
-              <path d="M8 9h8M8 12.5h5M8 16h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-            </svg>
-            <span>Host</span>
-          </a>
-        </nav>
-
-        <div class="sidebar-spacer"></div>
-
-        <div class="sidebar-note">
-          <span class="sidebar-note-dot" aria-hidden="true"></span>
-          <span>
-            <strong>Local only</strong>
-            <span>No account. No cloud.</span>
-          </span>
-        </div>
-
-        <div class="sidebar-footer">
-          <span id="app-version">v0.1.0</span>
-          <span>Foundation build</span>
-        </div>
-      </aside>
-
-      <main class="main-content" id="main-content">
-        <header class="page-header" id="machines">
-          <div>
-            <p class="eyebrow">Workspace</p>
-            <h1>Machines</h1>
-            <p class="lede">
-              A calm place for local virtual machines. This build establishes the
-              foundation and checks what your host can actually do.
-            </p>
-          </div>
-          <button class="button" id="refresh-host" type="button">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-              <path d="M20 11a8 8 0 1 0-2.3 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-              <path d="M20 5v6h-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span id="refresh-label">Recheck host</span>
-          </button>
-        </header>
-
-        <div class="alert-stack" id="global-alert" aria-live="polite"></div>
-
-        <section class="empty-state" aria-labelledby="empty-title">
-          <div class="empty-copy">
-            <p class="eyebrow">No machines yet</p>
-            <h2 id="empty-title">Your first machine starts here.</h2>
-            <p>
-              Virtual machine creation is the next milestone. When it arrives, this
-              space will hold your machines, their state, and a genuine live console.
-            </p>
-            <ul class="empty-facts">
-              <li>Real host diagnostics</li>
-              <li>Versioned local configuration</li>
-              <li>No account required</li>
-            </ul>
-          </div>
-
-          <div class="empty-art" aria-hidden="true">
-            <img
-              class="empty-art-symbol"
-              src="./assets/brand/wave-vm-symbol-white.svg"
-              alt=""
-              width="64"
-              height="64"
-            />
-            <span class="empty-art-caption">Ride your own systems.</span>
-            <span class="empty-art-meta">Local-first virtualization</span>
-          </div>
-        </section>
-
-        <section class="host-section" id="host-readiness" aria-labelledby="host-title">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Environment</p>
-              <h2 id="host-title">Host readiness</h2>
-              <p>
-                These values come from the Rust backend. Nothing here is inferred by
-                the interface.
-              </p>
-            </div>
-            <span class="summary-pill" id="host-summary" data-tone="neutral" role="status">
-              Checking host
-            </span>
-          </div>
-
-          <div class="host-panel" id="host-panel" aria-busy="true">
-            <div class="skeleton-card">
-              <span class="skeleton-line skeleton-line-short"></span>
-              <span class="skeleton-line"></span>
-              <span class="skeleton-line skeleton-line-medium"></span>
-            </div>
-            <div class="skeleton-card">
-              <span class="skeleton-line skeleton-line-short"></span>
-              <span class="skeleton-line"></span>
-              <span class="skeleton-line skeleton-line-medium"></span>
-            </div>
-            <div class="skeleton-card">
-              <span class="skeleton-line skeleton-line-short"></span>
-              <span class="skeleton-line"></span>
-              <span class="skeleton-line skeleton-line-medium"></span>
-            </div>
-            <div class="skeleton-card">
-              <span class="skeleton-line skeleton-line-short"></span>
-              <span class="skeleton-line"></span>
-              <span class="skeleton-line skeleton-line-medium"></span>
-            </div>
-          </div>
-        </section>
-
-        <section class="scope-section" aria-labelledby="scope-title">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Scope</p>
-              <h2 id="scope-title">What this build does</h2>
-            </div>
-          </div>
-          <div class="scope-grid">
-            <article class="scope-card">
-              <h3>Working now</h3>
-              <ul class="scope-list scope-list-ready">
-                <li>Desktop shell and navigation</li>
-                <li>Host, memory, and storage diagnostics</li>
-                <li>QEMU and qemu-img discovery</li>
-                <li>Verified Linux KVM accessibility check</li>
-                <li>Atomic, versioned local configuration</li>
-              </ul>
-            </article>
-            <article class="scope-card scope-card-muted">
-              <h3>Not in this build</h3>
-              <ul class="scope-list">
-                <li>Creating or editing VM definitions</li>
-                <li>Virtual disks and ISO selection</li>
-                <li>Starting QEMU or connecting over QMP</li>
-                <li>Graphical guest console</li>
-                <li>Networking and image downloads</li>
-              </ul>
-            </article>
-          </div>
-        </section>
-
-        <footer class="page-footer">
-          <span class="footer-brand">
-            <img
-              src="./assets/brand/wave-vm-symbol-navy.svg"
-              alt=""
-              width="14"
-              height="14"
-            />
-            Wave VM · local-first virtualization
-          </span>
-          <span>Built with Tauri 2 and Rust</span>
-        </footer>
-      </main>
-    </div>
-
+    <div id="app"></div>
     <noscript>
       <p class="noscript">
-        Wave VM needs JavaScript enabled to display host diagnostics.
+        Wave VM needs JavaScript enabled to display machines and host
+        diagnostics.
       </p>
     </noscript>
   </body>

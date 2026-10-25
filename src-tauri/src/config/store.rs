@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::ConfigError;
+use crate::vm::{VmConfig, VmState};
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +21,8 @@ pub struct AppConfig {
     pub schema_version: u32,
     pub created_at_unix: u64,
     pub last_opened_unix: u64,
+    #[serde(default)]
+    pub vms: Vec<VmConfig>,
 }
 
 pub struct ConfigStore {
@@ -51,6 +54,7 @@ impl ConfigStore {
                 schema_version: SCHEMA_VERSION,
                 created_at_unix: now,
                 last_opened_unix: now,
+                vms: Vec::new(),
             }
         };
 
@@ -85,6 +89,56 @@ impl ConfigStore {
 
     pub fn config(&self) -> &AppConfig {
         &self.config
+    }
+
+    pub fn vms(&self) -> &[VmConfig] {
+        &self.config.vms
+    }
+
+    pub fn vm(&self, id: &str) -> Option<&VmConfig> {
+        self.config.vms.iter().find(|vm| vm.id == id)
+    }
+
+    pub fn vm_mut(&mut self, id: &str) -> Option<&mut VmConfig> {
+        self.config.vms.iter_mut().find(|vm| vm.id == id)
+    }
+
+    pub fn add_vm(&mut self, vm: VmConfig) {
+        self.config.vms.push(vm);
+    }
+
+    pub fn remove_vm(&mut self, id: &str) -> Option<VmConfig> {
+        let index = self.config.vms.iter().position(|vm| vm.id == id)?;
+        Some(self.config.vms.remove(index))
+    }
+
+    pub fn vms_mut(&mut self) -> &mut [VmConfig] {
+        &mut self.config.vms
+    }
+
+    pub fn save(&self) -> Result<(), ConfigError> {
+        write_atomic(&self.config_path, &self.config)
+    }
+
+    pub fn normalize_stale_vm_states(&mut self) -> bool {
+        let now = unix_now();
+        let mut changed = false;
+
+        for vm in &mut self.config.vms {
+            if matches!(
+                vm.state,
+                VmState::Starting | VmState::Running | VmState::Stopping
+            ) {
+                vm.state = VmState::Error;
+                vm.last_error = Some(
+                    "Wave VM was not tracking this machine when the application started. Start it again to verify its state; an existing QEMU process will block a duplicate launch.".to_string(),
+                );
+                vm.updated_at_unix = now;
+                changed = true;
+            }
+        }
+
+        changed
     }
 }
 
@@ -124,7 +178,7 @@ fn load_config(path: &Path) -> Result<AppConfig, ConfigError> {
 fn migrate(config: &mut AppConfig, path: &Path) -> Result<(), ConfigError> {
     match config.schema_version {
         SCHEMA_VERSION => Ok(()),
-        0 => {
+        0 | 1 => {
             config.schema_version = SCHEMA_VERSION;
             Ok(())
         }
