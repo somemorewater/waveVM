@@ -19,6 +19,14 @@ Wave VM **cannot create or run virtual machines yet**. VM definitions, disks, QM
 - Versioned `config.json` stored in the platform application data directory, written atomically with restrictive permissions on Unix.
 - A reserved `vms/` directory for future VM definitions.
 
+## Brand assets
+
+The desktop interface uses the existing Wave VM brand assets from the website
+project: the white wordmark, white and navy symbols, favicon, and the app-icon
+source. Copies live in `src/assets/brand/` and `src-tauri/icons/`; see
+`src/assets/brand/README.md` for provenance. The desktop app does not read from
+or depend on the website repository at build time or runtime.
+
 ## Requirements
 
 - Rust stable and Cargo.
@@ -70,6 +78,7 @@ Configuration writes use a temporary file in the same directory followed by an a
 
 ```text
 src/                     Vanilla HTML, CSS, and ES modules
+src/assets/brand/        Local Wave VM brand SVGs
 src-tauri/src/
   commands/              Narrow Tauri command handlers
   config/                Versioned configuration and atomic persistence

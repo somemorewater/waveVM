@@ -1,19 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <rect width="1024" height="1024" rx="220" fill="#0b2430" />
-  <circle cx="764" cy="270" r="62" fill="#e8dfcd" />
-  <path
-    d="M146 566c78 0 78-118 156-118s78 118 156 118 78-118 156-118 78 118 156 118 78-118 108-118"
-    fill="none"
-    stroke="#54c3b8"
-    stroke-width="74"
-    stroke-linecap="round"
-  />
-  <path
-    d="M146 742c78 0 78-118 156-118s78 118 156 118 78-118 156-118 78 118 156 118 78-118 108-118"
-    fill="none"
-    stroke="#8fd8cf"
-    stroke-width="62"
-    stroke-linecap="round"
-    opacity="0.42"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img">
+  <title>Wave VM app icon</title>
+  <rect width="512" height="512" rx="112" fill="#0B2A4A"/>
+  <path fill="#FFFFFF" transform="translate(44.8 51.2) scale(6.4)" d="M12 52A40 40 0 0 1 46 12A30 30 0 0 0 54 52Z"/>
 </svg>

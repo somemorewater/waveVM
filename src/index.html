@@ -4,8 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#0b2430" />
+    <meta name="theme-color" content="#0B2A4A" />
     <title>Wave VM</title>
+    <link rel="icon" href="./assets/brand/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./js/main.js"></script>
   </head>
@@ -15,16 +16,14 @@
     <div class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="#machines" aria-label="Wave VM home">
-          <span class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 40 40" width="24" height="24" fill="none">
-              <path d="M5 24c4.5 0 4.5-6 9-6s4.5 6 9 6 4.5-6 9-6 4.5 6 6 6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
-              <path d="M5 31c4.5 0 4.5-6 9-6s4.5 6 9 6 4.5-6 9-6 4.5 6 6 6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" opacity=".55" />
-            </svg>
-          </span>
-          <span class="brand-copy">
-            <span class="brand-name">Wave VM</span>
-            <span class="brand-tagline">Ride your own systems.</span>
-          </span>
+          <img
+            class="brand-wordmark"
+            src="./assets/brand/wave-vm-wordmark-white.svg"
+            alt=""
+            width="344"
+            height="84"
+          />
+          <span class="brand-tagline">Ride your own systems.</span>
         </a>
 
         <nav class="primary-nav" aria-label="Primary">
@@ -97,13 +96,15 @@
           </div>
 
           <div class="empty-art" aria-hidden="true">
-            <svg viewBox="0 0 360 240" width="100%" height="100%" fill="none">
-              <rect x="1" y="1" width="358" height="238" rx="24" fill="#0b2430" stroke="#173945" />
-              <circle cx="286" cy="58" r="22" fill="#e8dfcd" opacity=".92" />
-              <path d="M36 158c30 0 30-36 60-36s30 36 60 36 30-36 60-36 30 36 60 36 30-36 48-36" stroke="#54c3b8" stroke-width="10" stroke-linecap="round" />
-              <path d="M36 190c30 0 30-36 60-36s30 36 60 36 30-36 60-36 30 36 60 36 30-36 48-36" stroke="#8fd8cf" stroke-width="8" stroke-linecap="round" opacity=".42" />
-              <path d="M52 96h66M52 112h38" stroke="#b9d8d4" stroke-width="6" stroke-linecap="round" opacity=".38" />
-            </svg>
+            <img
+              class="empty-art-symbol"
+              src="./assets/brand/wave-vm-symbol-white.svg"
+              alt=""
+              width="64"
+              height="64"
+            />
+            <span class="empty-art-caption">Ride your own systems.</span>
+            <span class="empty-art-meta">Local-first virtualization</span>
           </div>
         </section>
 
@@ -178,7 +179,15 @@
         </section>
 
         <footer class="page-footer">
-          <span>Wave VM · local-first virtualization</span>
+          <span class="footer-brand">
+            <img
+              src="./assets/brand/wave-vm-symbol-navy.svg"
+              alt=""
+              width="14"
+              height="14"
+            />
+            Wave VM · local-first virtualization
+          </span>
           <span>Built with Tauri 2 and Rust</span>
         </footer>
       </main>
