@@ -3,7 +3,7 @@ import {
   clearAlerts,
   createAlertStack,
 } from "../../components/alerts.js";
-import { buttonLink } from "../../components/button.js";
+import { button, buttonLink } from "../../components/button.js";
 import { createDetailList } from "../../components/detail-list.js";
 import { createEmptyState } from "../../components/empty-state.js";
 import { createErrorCard } from "../../components/error-card.js";
@@ -14,6 +14,8 @@ import { statusIndicator } from "../../components/status-indicator.js";
 import { element } from "../../utils/dom.js";
 import {
   accelerationLabel,
+  bootModeLabel,
+  fileName,
   formatCount,
   formatDisk,
   formatMemory,
@@ -21,6 +23,8 @@ import {
   vmStateLabel,
   vmStateTone,
 } from "../../utils/format.js";
+import { normalizeError } from "../../services/tauri.js";
+import { pickIsoFile } from "../../services/vm-service.js";
 import { createVmActionButtons } from "./vm-action-buttons.js";
 import { createVmActionController } from "./vm-actions.js";
 
@@ -28,6 +32,7 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
   let current = store.getState();
   let notice = null;
   let busyAction = null;
+  let mediaBusy = null;
   let headerKey = "";
   let contentKey = "";
   let destroyed = false;
@@ -69,6 +74,114 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
 
   function findVm(state) {
     return state.vms.find((vm) => vm.id === id) || null;
+  }
+
+  function mediaEditable(vm) {
+    return Boolean(
+      vm && !["starting", "running", "stopping"].includes(vm.state),
+    );
+  }
+
+  async function chooseMedia(vm) {
+    if (mediaBusy || !mediaEditable(vm)) {
+      return;
+    }
+
+    mediaBusy = "pick";
+    notice = null;
+    render(current);
+
+    try {
+      const path = await pickIsoFile();
+
+      if (!path) {
+        return;
+      }
+
+      mediaBusy = "attach";
+      render(current);
+
+      const updated = await store.setVmInstallIso(vm.id, path);
+      notice = {
+        severity: "info",
+        title: "Installation ISO attached",
+        message: `${fileName(path)} will boot on the next start of ${updated.name}.`,
+      };
+    } catch (error) {
+      const normalized = normalizeError(error);
+      notice = {
+        severity: "error",
+        title: "Installation ISO could not be attached",
+        message: normalized.message,
+        code: normalized.code,
+      };
+    } finally {
+      mediaBusy = null;
+      render(current);
+    }
+  }
+
+  async function detachMedia(vm) {
+    if (mediaBusy || !mediaEditable(vm)) {
+      return;
+    }
+
+    mediaBusy = "detach";
+    notice = null;
+    render(current);
+
+    try {
+      const updated = await store.setVmInstallIso(vm.id, null);
+      notice = {
+        severity: "info",
+        title: "Installation ISO detached",
+        message: `${updated.name} will boot from its virtual disk. The ISO file was not modified.`,
+      };
+    } catch (error) {
+      const normalized = normalizeError(error);
+      notice = {
+        severity: "error",
+        title: "Installation ISO could not be detached",
+        message: normalized.message,
+        code: normalized.code,
+      };
+    } finally {
+      mediaBusy = null;
+      render(current);
+    }
+  }
+
+  async function switchBootMode(vm, bootMode) {
+    if (mediaBusy || !mediaEditable(vm)) {
+      return;
+    }
+
+    mediaBusy = bootMode;
+    notice = null;
+    render(current);
+
+    try {
+      const updated = await store.setVmBootMode(vm.id, bootMode);
+      notice = {
+        severity: "info",
+        title: "Boot mode updated",
+        message:
+          updated.bootMode === "installer"
+            ? `${updated.name} will boot the installer ISO on its next start.`
+            : `${updated.name} will boot from its virtual disk on its next start.`,
+      };
+    } catch (error) {
+      const normalized = normalizeError(error);
+      notice = {
+        severity: "error",
+        title: "Boot mode could not be changed",
+        message: normalized.message,
+        code: normalized.code,
+      };
+    } finally {
+      mediaBusy = null;
+      render(current);
+    }
   }
 
   function lifecycleActions(vm) {
@@ -228,7 +341,7 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
         createDetailList([
           { label: "Name", value: vm.name },
           { label: "Guest architecture", value: vm.guestArch, code: true },
-          { label: "Guest OS", value: "Not installed", muted: true },
+          { label: "Guest OS", value: "Not detected", muted: true },
           { label: "Memory", value: formatMemory(vm.memoryMib) },
           { label: "Virtual CPUs", value: formatCount(vm.vcpus) },
           {
@@ -279,6 +392,8 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
       ],
     });
 
+    const media = mediaPanel(vm);
+
     const lifecycle = createPanel({
       title: "Lifecycle",
       description: "Start and stop actions are available in the page header.",
@@ -304,14 +419,162 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
           : null,
         element("p", {
           className: "panel-note",
-          text: "Guest operating system installation and installation media are outside this build.",
+          text: "Wave VM does not detect guest installation completion. After the installer finishes, stop the machine and switch to disk boot in Installation media.",
         }),
       ],
     });
 
     return element("div", {
       className: "vm-details-grid",
-      children: [overview, storage, lifecycle],
+      children: [overview, storage, media, lifecycle],
+    });
+  }
+
+  function mediaPanel(vm) {
+    const editable = mediaEditable(vm);
+    const pending = Boolean(mediaBusy);
+    const hasIso = Boolean(vm.installIsoPath);
+    const available = Boolean(vm.installIsoAvailable);
+    const installer = vm.bootMode === "installer";
+    const actions = [];
+
+    if (editable) {
+      actions.push(
+        button({
+          label: pending
+            ? "Working…"
+            : hasIso
+              ? "Replace ISO…"
+              : "Choose ISO…",
+          iconName: "folder",
+          small: true,
+          disabled: pending,
+          onClick: () => chooseMedia(vm),
+        }),
+      );
+
+      if (hasIso) {
+        actions.push(
+          button({
+            label: mediaBusy === "detach" ? "Detaching…" : "Detach",
+            variant: "ghost",
+            small: true,
+            disabled: pending,
+            onClick: () => detachMedia(vm),
+          }),
+        );
+      }
+
+      if (installer) {
+        actions.push(
+          button({
+            label: mediaBusy === "disk" ? "Switching…" : "Boot from disk",
+            variant: "ghost",
+            small: true,
+            disabled: pending || !vm.diskExists,
+            title: "Only switch after the guest installer has finished.",
+            onClick: () => switchBootMode(vm, "disk"),
+          }),
+        );
+      } else if (hasIso) {
+        actions.push(
+          button({
+            label:
+              mediaBusy === "installer" ? "Switching…" : "Boot installer again",
+            variant: "ghost",
+            small: true,
+            disabled: pending || !available,
+            onClick: () => switchBootMode(vm, "installer"),
+          }),
+        );
+      }
+    }
+
+    const notes = [];
+
+    if (!hasIso) {
+      notes.push(
+        element("p", {
+          className: "panel-copy",
+          text: "No installation media is attached. Choose a local ISO to boot an installer, or start the machine from its existing disk.",
+        }),
+      );
+    } else if (!available) {
+      notes.push(
+        element("p", {
+          className: "vm-card-error",
+          text: installer
+            ? "The recorded ISO file is missing or unavailable. Attach a replacement ISO, or switch to disk boot to start without it."
+            : "The recorded ISO file is missing or unavailable. Disk boot does not need it; attach a replacement to use installer boot again.",
+        }),
+      );
+    }
+
+    if (installer && available) {
+      notes.push(
+        element("p", {
+          className: "panel-copy",
+          text: "On the next start QEMU attaches this ISO as a read-only CD/DVD and boots it before the virtual disk.",
+        }),
+      );
+    }
+
+    if (!installer && hasIso) {
+      notes.push(
+        element("p", {
+          className: "panel-copy",
+          text: "The ISO stays recorded but is not attached while the machine boots from its virtual disk. Choose Boot installer again to reuse it.",
+        }),
+      );
+    }
+
+    if (!editable) {
+      notes.push(
+        element("p", {
+          className: "panel-note",
+          text: "Stop the machine before attaching, replacing, or detaching media, or changing the boot mode.",
+        }),
+      );
+    }
+
+    return createPanel({
+      title: "Installation media",
+      description:
+        "A local ISO used for the guest installer. The ISO is never copied, modified, or deleted.",
+      wide: true,
+      body: [
+        createDetailList([
+          {
+            label: "Boot mode",
+            value: statusIndicator({
+              label: bootModeLabel(vm.bootMode),
+              tone: installer ? "warn" : "ok",
+            }),
+          },
+          {
+            label: "ISO image",
+            value: hasIso ? fileName(vm.installIsoPath) : "None attached",
+            muted: !hasIso,
+          },
+          hasIso
+            ? { label: "ISO path", value: vm.installIsoPath, code: true }
+            : null,
+          {
+            label: "Media file",
+            value: statusIndicator(
+              !hasIso
+                ? { label: "No media", tone: "neutral" }
+                : available
+                  ? { label: "Available", tone: "ok" }
+                  : { label: "Missing", tone: "error" },
+            ),
+          },
+        ].filter(Boolean)),
+        ...notes,
+        actions.length
+          ? element("div", { className: "media-actions", children: actions })
+          : null,
+      ],
     });
   }
 
@@ -319,9 +582,9 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
     return element("aside", {
       className: "inline-note",
       children: [
-        element("strong", { text: "Not available yet" }),
+        element("strong", { text: "Current scope" }),
         element("p", {
-          text: "Editing machine configuration, deleting machines, snapshots, networking, and guest OS installation are outside this build.",
+          text: "Installation media can be attached to a stopped machine. Editing other configuration, deleting machines, snapshots, and networking remain outside this build.",
         }),
       ],
     });
@@ -348,6 +611,10 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
       vm.updatedAtUnix,
       vm.guestArch,
       vm.diskPath,
+      vm.installIsoPath,
+      vm.installIsoAvailable,
+      vm.bootMode,
+      mediaBusy,
     ]);
   }
 
@@ -369,6 +636,7 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
   }
 
   const unsubscribe = store.subscribe(render);
+  store.refreshVms({ silent: true });
 
   return {
     element: page,

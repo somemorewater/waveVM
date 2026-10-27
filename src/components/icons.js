@@ -39,6 +39,12 @@ const ICONS = {
     '<path d="M12 3.5 19 6v5.5c0 4.2-2.8 7.4-7 9-4.2-1.6-7-4.8-7-9V6z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   download:
     '<path d="M12 4v10M8 10l4 4 4-4M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  maximize:
+    '<path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  minimize:
+    '<path d="M9 4v5H4M15 4v5h5M20 15h-5v5M4 15h5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  mouse:
+    '<rect x="7" y="3" width="10" height="18" rx="5" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
 };
 
 export function icon(name, size = 18, className = "") {

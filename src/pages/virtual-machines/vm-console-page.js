@@ -8,8 +8,13 @@ import { icon } from "../../components/icons.js";
 import { statusIndicator } from "../../components/status-indicator.js";
 import { getVmConsole } from "../../services/vm-service.js";
 import { normalizeError } from "../../services/tauri.js";
+import {
+  getWindowFullscreen,
+  setWindowFullscreen,
+} from "../../services/window-service.js";
 import { element } from "../../utils/dom.js";
 import { vmStateLabel } from "../../utils/format.js";
+import { releaseCapture as releaseNoVncCapture } from "../../vendor/novnc/core/util/events.js";
 import { canStartVm } from "./vm-action-buttons.js";
 
 export function createVmConsolePage({ store, setPageHeader }, id) {
@@ -23,13 +28,29 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
   let starting = false;
   let stopping = false;
   let notice = null;
+  let fullscreen = false;
+  let fullscreenPending = false;
+  let fullscreenInteraction = false;
+  let fullscreenSyncTimer = null;
+  let mouseCaptured = false;
+  let virtualPointer = null;
+  const controlNodes = [];
 
   const alerts = createAlertStack();
   const statusArea = element("div", { className: "vm-console-toolbar-meta" });
   const toolbarNote = element("p", { className: "vm-console-toolbar-note" });
+  const toolbarActions = element("div", {
+    className: "vm-console-toolbar-actions",
+  });
   const toolbar = element("div", {
     className: "vm-console-toolbar",
-    children: [statusArea, toolbarNote],
+    children: [
+      element("div", {
+        className: "vm-console-toolbar-copy",
+        children: [statusArea, toolbarNote],
+      }),
+      toolbarActions,
+    ],
   });
 
   const screen = element("div", {
@@ -38,6 +59,52 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
       "aria-label": "Guest display",
       tabindex: "0",
     },
+  });
+  const pointerLockSupported =
+    typeof screen.requestPointerLock === "function" &&
+    typeof document.exitPointerLock === "function";
+
+  const toolbarMouseButton = createMouseControl();
+  const toolbarFullscreenButton = createFullscreenControl();
+  toolbarActions.append(toolbarMouseButton, toolbarFullscreenButton);
+
+  const immersiveName = element("strong", {
+    className: "vm-console-immersive-name",
+  });
+  const immersiveStatus = element("span", {
+    className: "vm-console-immersive-status",
+  });
+  const immersiveMouseButton = createMouseControl();
+  const immersiveFullscreenButton = createFullscreenControl();
+  const immersiveBar = element("div", {
+    className: "vm-console-immersive-bar",
+    attrs: { hidden: true, "aria-label": "Console controls" },
+    children: [
+      element("div", {
+        className: "vm-console-immersive-copy",
+        children: [
+          immersiveName,
+          element("span", {
+            className: "vm-console-immersive-divider",
+            text: "·",
+          }),
+          immersiveStatus,
+          element("span", {
+            className: "vm-console-immersive-hint",
+            text: "F11 fullscreen · Esc releases mouse",
+          }),
+        ],
+      }),
+      element("div", {
+        className: "vm-console-immersive-actions",
+        children: [immersiveMouseButton, immersiveFullscreenButton],
+      }),
+    ],
+  });
+  const captureHint = element("div", {
+    className: "vm-console-capture-hint",
+    attrs: { hidden: true, role: "status", "aria-live": "polite" },
+    text: "Mouse captured — press Esc to release",
   });
 
   const overlayIcon = element("div", { className: "vm-console-overlay-icon" });
@@ -58,12 +125,12 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
 
   const stage = element("div", {
     className: "vm-console-stage",
-    children: [screen, overlay],
+    children: [screen, overlay, captureHint, immersiveBar],
   });
 
   const note = element("p", {
     className: "vm-console-note",
-    text: "Click the guest screen to send keyboard and mouse input. The VNC listener is bound to 127.0.0.1 and uses a password generated for this run.",
+    text: "Click the guest screen to send keyboard and mouse input. F11 or the console controls toggle fullscreen; while the mouse is captured, press Esc to return control to the host. After release, click the guest to resume input, and Escape reaches the guest again. The VNC listener is bound to 127.0.0.1 and uses a password generated for this run.",
   });
 
   const page = element("div", {
@@ -110,6 +177,545 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
       disabled: starting,
       onClick: () => startMachine(),
     });
+  }
+
+  function createMouseControl() {
+    const node = button({
+      label: "Capture mouse",
+      iconName: "mouse",
+      small: true,
+      onClick: () => toggleMouseControl(),
+      title: "Capture the host pointer inside the guest display.",
+    });
+
+    controlNodes.push({ kind: "mouse", node });
+    return node;
+  }
+
+  function createFullscreenControl() {
+    const node = button({
+      label: "Fullscreen",
+      iconName: "maximize",
+      small: true,
+      onClick: () => toggleFullscreen(),
+      title: "Enter fullscreen (F11).",
+    });
+
+    controlNodes.push({ kind: "fullscreen", node });
+    return node;
+  }
+
+  function updateControlButton(node, label, iconName, title) {
+    const iconNode = node.querySelector("svg");
+    const labelNode = node.querySelector("span");
+
+    if (iconNode) {
+      iconNode.replaceWith(
+        icon(iconName, node.classList.contains("button-small") ? 14 : 16),
+      );
+    }
+
+    if (labelNode) {
+      labelNode.textContent = label;
+    }
+
+    node.setAttribute("aria-label", label);
+    node.title = title;
+  }
+
+  function syncControls() {
+    if (destroyed) {
+      return;
+    }
+
+    for (const { kind, node } of controlNodes) {
+      if (kind === "fullscreen") {
+        node.disabled = fullscreenPending;
+        updateControlButton(
+          node,
+          fullscreen ? "Exit fullscreen" : "Fullscreen",
+          fullscreen ? "minimize" : "maximize",
+          fullscreen ? "Leave fullscreen (F11)." : "Enter fullscreen (F11).",
+        );
+        continue;
+      }
+
+      const ready = connectionState === "connected" && Boolean(rfb);
+      let label = "Capture mouse";
+      let title =
+        "Lock the host pointer inside the guest display. Press Esc to release it.";
+      let iconName = "mouse";
+      let disabled = !ready;
+
+      if (mouseCaptured) {
+        label = "Release mouse";
+        title = "Press Esc to release the pointer capture.";
+        disabled = false;
+      } else if (!pointerLockSupported) {
+        label = "Focus guest";
+        title =
+          "Pointer lock is unavailable in this webview. Click the guest display to focus input.";
+      }
+
+      node.disabled = disabled;
+      updateControlButton(node, label, iconName, title);
+    }
+
+    captureHint.hidden = !mouseCaptured;
+    immersiveBar.hidden = !fullscreen;
+  }
+
+  function renderImmersiveBar() {
+    const vm = findVm();
+    immersiveName.textContent = vm?.name || "Machine console";
+    immersiveStatus.textContent = statusFor(vm).label;
+  }
+
+  function setFullscreenState(next) {
+    fullscreen = Boolean(next);
+    document.body.classList.toggle("console-immersive", fullscreen);
+    immersiveBar.hidden = !fullscreen;
+    renderImmersiveBar();
+    syncControls();
+  }
+
+  function focusHostControl() {
+    const target = fullscreen
+      ? !immersiveMouseButton.disabled
+        ? immersiveMouseButton
+        : immersiveFullscreenButton
+      : !toolbarMouseButton.disabled
+        ? toolbarMouseButton
+        : toolbarFullscreenButton;
+
+    target?.focus({ preventScroll: true });
+  }
+
+  function scheduleFullscreenSync(delay = 220) {
+    if (fullscreenSyncTimer !== null) {
+      window.clearTimeout(fullscreenSyncTimer);
+    }
+
+    fullscreenSyncTimer = window.setTimeout(async () => {
+      fullscreenSyncTimer = null;
+
+      if (destroyed || fullscreenPending) {
+        return;
+      }
+
+      try {
+        const actual = await getWindowFullscreen();
+
+        if (destroyed) {
+          return;
+        }
+
+        if (actual !== fullscreen) {
+          setFullscreenState(actual);
+
+          if (!actual) {
+            releasePointerCapture({ focusHost: true });
+          }
+        }
+      } catch (error) {
+        console.warn("Wave VM could not read fullscreen state", error);
+      }
+
+      if (mouseCaptured) {
+        clampVirtualPointer();
+      }
+    }, delay);
+  }
+
+  async function applyFullscreen(next) {
+    if (destroyed || fullscreenPending) {
+      return;
+    }
+
+    const value = Boolean(next);
+    const previous = fullscreen;
+    fullscreenInteraction = true;
+    fullscreenPending = true;
+    setFullscreenState(value);
+
+    try {
+      await setWindowFullscreen(value);
+
+      if (destroyed) {
+        return;
+      }
+
+      scheduleFullscreenSync();
+
+      if (value) {
+        window.requestAnimationFrame(() => {
+          if (!destroyed && fullscreen) {
+            rfb?.focus({ preventScroll: true });
+          }
+        });
+      } else if (mouseCaptured) {
+        releasePointerCapture({ focusHost: true });
+      } else {
+        focusHostControl();
+      }
+    } catch (error) {
+      if (destroyed) {
+        return;
+      }
+
+      setFullscreenState(previous);
+      const normalized = normalizeError(error);
+      notice = {
+        severity: "error",
+        title: "Fullscreen could not be changed",
+        message: normalized.message,
+        code: normalized.code,
+      };
+      renderAlerts();
+    } finally {
+      fullscreenPending = false;
+
+      if (!destroyed) {
+        syncControls();
+        renderImmersiveBar();
+      }
+    }
+  }
+
+  function toggleFullscreen() {
+    if (destroyed || fullscreenPending) {
+      return;
+    }
+
+    applyFullscreen(!fullscreen);
+  }
+
+  function handleWindowResize() {
+    if (destroyed) {
+      return;
+    }
+
+    if (mouseCaptured) {
+      clampVirtualPointer();
+    }
+
+    scheduleFullscreenSync(180);
+  }
+
+  function canvasMetrics() {
+    const canvas = screen.querySelector("canvas");
+
+    if (!canvas) {
+      return null;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+
+    if (rect.width < 2 || rect.height < 2) {
+      return null;
+    }
+
+    return { canvas, rect };
+  }
+
+  function setVirtualPointerToCenter() {
+    const metrics = canvasMetrics();
+
+    if (!metrics) {
+      virtualPointer = null;
+      return null;
+    }
+
+    virtualPointer = {
+      x: metrics.rect.left + metrics.rect.width / 2,
+      y: metrics.rect.top + metrics.rect.height / 2,
+    };
+    return metrics;
+  }
+
+  function clampVirtualPointer() {
+    const metrics = canvasMetrics();
+
+    if (!metrics || !virtualPointer) {
+      return metrics;
+    }
+
+    const minX = metrics.rect.left + 0.5;
+    const maxX = Math.max(minX, metrics.rect.right - 0.5);
+    const minY = metrics.rect.top + 0.5;
+    const maxY = Math.max(minY, metrics.rect.bottom - 0.5);
+
+    virtualPointer = {
+      x: Math.min(Math.max(virtualPointer.x, minX), maxX),
+      y: Math.min(Math.max(virtualPointer.y, minY), maxY),
+    };
+    return metrics;
+  }
+
+  function dispatchSyntheticMouse(type, buttons, button = 0) {
+    const metrics = clampVirtualPointer();
+
+    if (!metrics || !virtualPointer) {
+      return;
+    }
+
+    metrics.canvas.dispatchEvent(
+      new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window,
+        clientX: virtualPointer.x,
+        clientY: virtualPointer.y,
+        screenX: virtualPointer.x,
+        screenY: virtualPointer.y,
+        button,
+        buttons: buttons || 0,
+      }),
+    );
+  }
+
+  function dispatchSyntheticWheel(source) {
+    const metrics = clampVirtualPointer();
+
+    if (!metrics || !virtualPointer) {
+      return;
+    }
+
+    metrics.canvas.dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window,
+        clientX: virtualPointer.x,
+        clientY: virtualPointer.y,
+        screenX: virtualPointer.x,
+        screenY: virtualPointer.y,
+        buttons: source.buttons || 0,
+        deltaX: source.deltaX,
+        deltaY: source.deltaY,
+        deltaZ: source.deltaZ,
+        deltaMode: source.deltaMode,
+      }),
+    );
+  }
+
+  function moveVirtualPointer(movementX = 0, movementY = 0, buttons = 0) {
+    if (!virtualPointer) {
+      setVirtualPointerToCenter();
+    }
+
+    if (!virtualPointer) {
+      return;
+    }
+
+    const metrics = canvasMetrics();
+
+    if (!metrics) {
+      return;
+    }
+
+    const minX = metrics.rect.left + 0.5;
+    const maxX = Math.max(minX, metrics.rect.right - 0.5);
+    const minY = metrics.rect.top + 0.5;
+    const maxY = Math.max(minY, metrics.rect.bottom - 0.5);
+    const dx = Number.isFinite(movementX) ? movementX : 0;
+    const dy = Number.isFinite(movementY) ? movementY : 0;
+
+    virtualPointer = {
+      x: Math.min(Math.max(virtualPointer.x + dx, minX), maxX),
+      y: Math.min(Math.max(virtualPointer.y + dy, minY), maxY),
+    };
+
+    dispatchSyntheticMouse("mousemove", buttons);
+  }
+
+  function handleLockedPointerEvent(event) {
+    if (!mouseCaptured || !event.isTrusted) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (event.type === "contextmenu") {
+      return;
+    }
+
+    if (event.type === "wheel") {
+      if (!virtualPointer) {
+        setVirtualPointerToCenter();
+      }
+      clampVirtualPointer();
+      dispatchSyntheticWheel(event);
+      return;
+    }
+
+    if (event.type === "mousemove") {
+      moveVirtualPointer(event.movementX, event.movementY, event.buttons);
+      return;
+    }
+
+    if (!virtualPointer) {
+      setVirtualPointerToCenter();
+    }
+
+    dispatchSyntheticMouse(event.type, event.buttons, event.button);
+
+    if (event.type === "mousedown") {
+      // noVNC installs its own full-window drag capture on mousedown.
+      // Pointer lock already provides capture, so remove that overlay.
+      releaseNoVncCapture();
+    }
+  }
+
+  function finalizeMouseRelease({ focusHost = true } = {}) {
+    if (!mouseCaptured) {
+      return;
+    }
+
+    if (virtualPointer) {
+      dispatchSyntheticMouse("mouseup", 0, 0);
+    }
+
+    releaseNoVncCapture();
+    mouseCaptured = false;
+    virtualPointer = null;
+    syncControls();
+
+    if (focusHost && !destroyed) {
+      rfb?.blur();
+
+      if (document.hasFocus()) {
+        focusHostControl();
+      }
+    }
+  }
+
+  function releasePointerCapture({ focusHost = true } = {}) {
+    if (document.pointerLockElement === screen) {
+      try {
+        document.exitPointerLock();
+      } catch (error) {
+        console.warn("Wave VM pointer lock release failed", error);
+      }
+    }
+
+    finalizeMouseRelease({ focusHost });
+  }
+
+  function handlePointerLockChange() {
+    if (destroyed) {
+      return;
+    }
+
+    if (document.pointerLockElement === screen) {
+      if (mouseCaptured) {
+        return;
+      }
+
+      releaseNoVncCapture();
+      mouseCaptured = true;
+      setVirtualPointerToCenter();
+      dispatchSyntheticMouse("mousemove", 0);
+      rfb?.focus({ preventScroll: true });
+      syncControls();
+      return;
+    }
+
+    if (mouseCaptured) {
+      finalizeMouseRelease({ focusHost: true });
+    }
+  }
+
+  function handlePointerLockError() {
+    if (destroyed) {
+      return;
+    }
+
+    mouseCaptured = false;
+    virtualPointer = null;
+    releaseNoVncCapture();
+    syncControls();
+    notice = {
+      severity: "warning",
+      title: "Mouse capture could not start",
+      message:
+        "The webview did not grant pointer lock. Click the guest display to focus it, or use F11 and the fullscreen controls.",
+      code: "pointer_lock_unavailable",
+    };
+    renderAlerts();
+  }
+
+  function toggleMouseControl() {
+    if (mouseCaptured) {
+      releasePointerCapture();
+      return;
+    }
+
+    if (!rfb || connectionState !== "connected") {
+      return;
+    }
+
+    if (!pointerLockSupported) {
+      rfb.focus({ preventScroll: true });
+      notice = {
+        severity: "warning",
+        title: "Mouse capture is unavailable",
+        message:
+          "This webview does not support pointer lock. Click the guest display to focus input, and use F11 or the fullscreen controls to leave fullscreen.",
+        code: "pointer_lock_unavailable",
+      };
+      renderAlerts();
+      return;
+    }
+
+    try {
+      const request = screen.requestPointerLock();
+
+      if (request && typeof request.catch === "function") {
+        request.catch(handlePointerLockError);
+      }
+    } catch (error) {
+      console.warn("Wave VM pointer lock request failed", error);
+      handlePointerLockError();
+    }
+  }
+
+  function handleHostKeyDown(event) {
+    if (destroyed) {
+      return;
+    }
+
+    if (event.key === "F11" || event.code === "F11") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      if (!event.repeat) {
+        toggleFullscreen();
+      }
+      return;
+    }
+
+    if (
+      event.key === "Escape" &&
+      (mouseCaptured || document.pointerLockElement === screen)
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      releasePointerCapture();
+    }
+  }
+
+  function handleHostKeyUp(event) {
+    if (
+      !destroyed &&
+      (event.key === "F11" || event.code === "F11")
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
   }
 
   function overlayPresentation() {
@@ -289,7 +895,7 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
     switch (connectionState) {
       case "connected":
         toolbarNote.textContent =
-          "Loopback VNC · keyboard and mouse input enabled";
+          "Loopback VNC · F11 fullscreen · Esc releases mouse capture";
         break;
       case "loading":
       case "connecting":
@@ -310,6 +916,9 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
         toolbarNote.textContent = "Preparing the local console.";
         break;
     }
+
+    renderImmersiveBar();
+    syncControls();
   }
 
   function setConnection(state, message = "") {
@@ -334,6 +943,12 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
   function disconnectRfb() {
     const client = rfb;
     rfb = null;
+
+    if (mouseCaptured || document.pointerLockElement === screen) {
+      releasePointerCapture({ focusHost: false });
+    }
+
+    releaseNoVncCapture();
 
     if (client) {
       try {
@@ -453,6 +1068,12 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
         }
 
         rfb = null;
+
+        if (mouseCaptured || document.pointerLockElement === screen) {
+          releasePointerCapture({ focusHost: false });
+        }
+
+        releaseNoVncCapture();
 
         if (destroyed || generation !== connectGeneration) {
           return;
@@ -651,6 +1272,7 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
 
     current = state;
     renderAlerts();
+    renderImmersiveBar();
 
     const vm = findVm(state);
     renderHeader(vm);
@@ -705,13 +1327,79 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
     }
   }
 
+  const wheelListenerOptions = { capture: true, passive: false };
+
+  document.addEventListener("pointerlockchange", handlePointerLockChange);
+  document.addEventListener("pointerlockerror", handlePointerLockError);
+  window.addEventListener("keydown", handleHostKeyDown, true);
+  window.addEventListener("keyup", handleHostKeyUp, true);
+  window.addEventListener("resize", handleWindowResize);
+  screen.addEventListener("mousemove", handleLockedPointerEvent, true);
+  screen.addEventListener("mousedown", handleLockedPointerEvent, true);
+  screen.addEventListener("mouseup", handleLockedPointerEvent, true);
+  screen.addEventListener("wheel", handleLockedPointerEvent, wheelListenerOptions);
+  screen.addEventListener("contextmenu", handleLockedPointerEvent, true);
+
+  getWindowFullscreen()
+    .then((value) => {
+      if (!destroyed && !fullscreenInteraction) {
+        setFullscreenState(value);
+      }
+    })
+    .catch(() => {
+      // The console is also renderable outside the desktop shell for checks.
+    });
+
   const unsubscribe = store.subscribe(render);
 
   return {
     element: page,
     destroy() {
+      if (destroyed) {
+        return;
+      }
+
       destroyed = true;
       connectGeneration += 1;
+
+      if (fullscreenSyncTimer !== null) {
+        window.clearTimeout(fullscreenSyncTimer);
+        fullscreenSyncTimer = null;
+      }
+
+      document.removeEventListener("pointerlockchange", handlePointerLockChange);
+      document.removeEventListener("pointerlockerror", handlePointerLockError);
+      window.removeEventListener("keydown", handleHostKeyDown, true);
+      window.removeEventListener("keyup", handleHostKeyUp, true);
+      window.removeEventListener("resize", handleWindowResize);
+      screen.removeEventListener("mousemove", handleLockedPointerEvent, true);
+      screen.removeEventListener("mousedown", handleLockedPointerEvent, true);
+      screen.removeEventListener("mouseup", handleLockedPointerEvent, true);
+      screen.removeEventListener("wheel", handleLockedPointerEvent, {
+        capture: true,
+      });
+      screen.removeEventListener("contextmenu", handleLockedPointerEvent, true);
+
+      if (mouseCaptured || document.pointerLockElement === screen) {
+        try {
+          document.exitPointerLock();
+        } catch (error) {
+          console.warn("Wave VM pointer lock cleanup failed", error);
+        }
+      }
+
+      mouseCaptured = false;
+      virtualPointer = null;
+      releaseNoVncCapture();
+      document.body.classList.remove("console-immersive");
+
+      if (fullscreen) {
+        setWindowFullscreen(false).catch((error) => {
+          console.warn("Wave VM fullscreen cleanup failed", error);
+        });
+      }
+
+      fullscreen = false;
       disconnectRfb();
       unsubscribe();
     },

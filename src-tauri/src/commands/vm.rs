@@ -11,7 +11,9 @@ use crate::host::{self, KvmStatus};
 use crate::qemu::ToolStatus;
 use crate::state::{AppInner, AppState};
 use crate::vm::runtime::ConsoleSession;
-use crate::vm::{self, disk, runtime, CreateVmInput, VmConfig, VmError, VmState, VmSummary};
+use crate::vm::{
+    self, disk, media, runtime, BootMode, CreateVmInput, VmConfig, VmError, VmState, VmSummary,
+};
 
 static NEXT_VM_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -200,6 +202,16 @@ fn create_vm_inner(
         VmError::QemuUnavailable("qemu-img did not report an executable path.".to_string())
     })?;
 
+    let install_iso_path = match input.install_iso_path.as_deref() {
+        Some(value) if !value.trim().is_empty() => Some(media::validate_iso_file(value)?),
+        _ => None,
+    };
+    let boot_mode = if install_iso_path.is_some() {
+        BootMode::Installer
+    } else {
+        BootMode::Disk
+    };
+
     let id = generate_vm_id();
     let vm_dir = inner.store.vms_dir().join(&id);
     let disk_path = vm_dir.join("disk.qcow2");
@@ -250,6 +262,8 @@ fn create_vm_inner(
         disk_size_gib: validated.disk_size_gib,
         state: VmState::Stopped,
         last_error: None,
+        install_iso_path,
+        boot_mode,
         created_at_unix: now,
         updated_at_unix: now,
     };
@@ -304,10 +318,28 @@ fn start_vm_inner(
         VmError::QemuUnavailable("QEMU did not report an executable path.".to_string())
     })?;
 
+    let install_iso = match vm.boot_mode {
+        BootMode::Installer => {
+            let raw = vm.install_iso_path.as_deref().ok_or_else(|| {
+                VmError::Validation(
+                    "installer boot is selected, but no installation ISO is attached".to_string(),
+                )
+            })?;
+            Some(media::validate_iso_file(raw)?)
+        }
+        BootMode::Disk => None,
+    };
+
     update_vm_state(inner, id, VmState::Starting, None)?;
 
     let kvm_usable = matches!(host.kvm.status, KvmStatus::Usable);
-    let launch = runtime::launch(&vm, Path::new(qemu), &disk_path, kvm_usable);
+    let launch = runtime::launch(
+        &vm,
+        Path::new(qemu),
+        &disk_path,
+        kvm_usable,
+        install_iso.as_deref().map(Path::new),
+    );
 
     match launch {
         Ok(running) => {

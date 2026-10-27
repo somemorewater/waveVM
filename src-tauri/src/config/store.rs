@@ -13,7 +13,7 @@ use serde_json::Value;
 use super::ConfigError;
 use crate::vm::{VmConfig, VmState};
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -178,7 +178,7 @@ fn load_config(path: &Path) -> Result<AppConfig, ConfigError> {
 fn migrate(config: &mut AppConfig, path: &Path) -> Result<(), ConfigError> {
     match config.schema_version {
         SCHEMA_VERSION => Ok(()),
-        0 | 1 => {
+        0 | 1 | 2 => {
             config.schema_version = SCHEMA_VERSION;
             Ok(())
         }

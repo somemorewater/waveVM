@@ -205,3 +205,16 @@ export function vmStateTone(state) {
 export function accelerationLabel(value) {
   return ACCELERATION_LABELS[value] || "Not running";
 }
+
+export function bootModeLabel(mode) {
+  return mode === "installer" ? "Installer boot" : "Disk boot";
+}
+
+export function fileName(path) {
+  if (typeof path !== "string" || path.length === 0) {
+    return "";
+  }
+
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || path;
+}

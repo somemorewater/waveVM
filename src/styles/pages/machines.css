@@ -133,6 +133,15 @@
   font-size: 11px;
 }
 
+.media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
 .vm-console-page {
   display: grid;
   gap: 12px;
@@ -148,6 +157,19 @@
 }
 
 .vm-console-toolbar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.vm-console-toolbar-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vm-console-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -183,6 +205,109 @@
 .vm-console-screen:focus-visible {
   outline: 2px solid var(--accent-500);
   outline-offset: -2px;
+}
+
+.vm-console-immersive-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  max-width: calc(100% - 24px);
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(6, 24, 43, 0.9);
+  color: #f6f5ef;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+
+.vm-console-immersive-bar[hidden] {
+  display: none;
+}
+
+.vm-console-immersive-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.vm-console-immersive-name {
+  max-width: 240px;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vm-console-immersive-status,
+.vm-console-immersive-hint,
+.vm-console-immersive-divider {
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.vm-console-immersive-status {
+  color: #bdc9d5;
+}
+
+.vm-console-immersive-hint {
+  color: #91a6b3;
+  font-size: 10px;
+}
+
+.vm-console-immersive-divider {
+  color: #5e7380;
+  font-size: 10px;
+}
+
+.vm-console-immersive-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.vm-console-immersive-bar .button {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f6f5ef;
+  box-shadow: none;
+}
+
+.vm-console-immersive-bar .button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.vm-console-immersive-bar .button:disabled {
+  opacity: 0.55;
+}
+
+.vm-console-capture-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 4;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(6, 24, 43, 0.88);
+  color: #dce8ec;
+  font-size: 11.5px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.vm-console-capture-hint[hidden] {
+  display: none;
 }
 
 .vm-console-overlay {
@@ -277,6 +402,76 @@
   color: var(--muted);
   font-size: 11.5px;
   line-height: 1.55;
+}
+
+body.console-immersive {
+  overflow: hidden;
+}
+
+body.console-immersive .sidebar,
+body.console-immersive .topbar,
+body.console-immersive .page-footer {
+  display: none;
+}
+
+body.console-immersive .app-shell {
+  display: block;
+  min-height: 100vh;
+}
+
+body.console-immersive .main-column {
+  min-height: 100vh;
+}
+
+body.console-immersive .page-outlet {
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+body.console-immersive .vm-console-page {
+  height: 100vh;
+  gap: 0;
+}
+
+body.console-immersive .vm-console-toolbar,
+body.console-immersive .vm-console-note {
+  display: none;
+}
+
+body.console-immersive .vm-console-stage {
+  height: 100vh;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.console-immersive .alert-stack:not(:empty) {
+  position: fixed;
+  top: 68px;
+  right: 16px;
+  z-index: 8;
+  width: min(520px, calc(100vw - 32px));
+}
+
+@media (max-width: 760px) {
+  .vm-console-immersive-hint,
+  .vm-console-immersive-divider {
+    display: none;
+  }
+
+  .vm-console-immersive-name {
+    max-width: 130px;
+  }
+}
+
+@media (max-width: 560px) {
+  .vm-console-immersive-copy {
+    display: none;
+  }
 }
 
 @keyframes vm-console-spin {

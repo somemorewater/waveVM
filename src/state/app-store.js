@@ -3,6 +3,8 @@ import { getAppInfo } from "../services/app-service.js";
 import {
   createVm as createVmRequest,
   listVms,
+  setVmBootMode as setVmBootModeRequest,
+  setVmInstallIso as setVmInstallIsoRequest,
   startVm as startVmRequest,
   stopVm as stopVmRequest,
 } from "../services/vm-service.js";
@@ -178,8 +180,7 @@ export function createAppStore() {
     return vmsRequest;
   }
 
-  async function createVm(input) {
-    const vm = await createVmRequest(input);
+  function applyVmUpdate(vm) {
     setState({
       vms: upsertVm(state.vms, vm),
       vmsStatus: "ready",
@@ -188,30 +189,26 @@ export function createAppStore() {
     updatePolling();
     refreshVms({ silent: true });
     return vm;
+  }
+
+  async function createVm(input) {
+    return applyVmUpdate(await createVmRequest(input));
   }
 
   async function startVm(id) {
-    const vm = await startVmRequest(id);
-    setState({
-      vms: upsertVm(state.vms, vm),
-      vmsStatus: "ready",
-      vmsError: null,
-    });
-    updatePolling();
-    refreshVms({ silent: true });
-    return vm;
+    return applyVmUpdate(await startVmRequest(id));
   }
 
   async function stopVm(id) {
-    const vm = await stopVmRequest(id);
-    setState({
-      vms: upsertVm(state.vms, vm),
-      vmsStatus: "ready",
-      vmsError: null,
-    });
-    updatePolling();
-    refreshVms({ silent: true });
-    return vm;
+    return applyVmUpdate(await stopVmRequest(id));
+  }
+
+  async function setVmInstallIso(id, path) {
+    return applyVmUpdate(await setVmInstallIsoRequest(id, path));
+  }
+
+  async function setVmBootMode(id, bootMode) {
+    return applyVmUpdate(await setVmBootModeRequest(id, bootMode));
   }
 
   function subscribe(listener) {
@@ -256,6 +253,8 @@ export function createAppStore() {
     createVm,
     startVm,
     stopVm,
+    setVmInstallIso,
+    setVmBootMode,
     destroy,
   };
 }

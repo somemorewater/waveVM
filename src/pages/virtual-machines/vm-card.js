@@ -3,6 +3,8 @@ import { statusIndicator } from "../../components/status-indicator.js";
 import { element, text } from "../../utils/dom.js";
 import {
   accelerationLabel,
+  bootModeLabel,
+  fileName,
   formatCount,
   vmStateLabel,
   vmStateTone,
@@ -21,7 +23,9 @@ export function createVmCard({ vm, busyAction = null, onStart, onStop }) {
           element("h3", { text: text(vm.name, "Unnamed machine") }),
           element("p", {
             className: "vm-card-kicker",
-            text: `${text(vm.guestArch, "unknown")} guest · blank disk`,
+            text: `${text(vm.guestArch, "unknown")} guest · ${bootModeLabel(
+              vm.bootMode,
+            ).toLowerCase()}`,
           }),
         ],
       }),
@@ -59,6 +63,21 @@ export function createVmCard({ vm, busyAction = null, onStart, onStop }) {
         text: "The virtual disk is missing. Start is disabled until the disk is restored.",
       });
 
+  const media = vm.installIsoPath
+    ? element("p", {
+        className:
+          vm.bootMode === "installer" && !vm.installIsoAvailable
+            ? "vm-card-error"
+            : "vm-card-note",
+        text:
+          vm.bootMode === "installer" && !vm.installIsoAvailable
+            ? `Installer ISO ${fileName(vm.installIsoPath)} is missing.`
+            : vm.bootMode === "installer"
+              ? `Installer ISO: ${fileName(vm.installIsoPath)}`
+              : `Disk boot · ISO retained (${fileName(vm.installIsoPath)})`,
+      })
+    : null;
+
   const footer = element("div", {
     className: "vm-card-footer",
     children: [
@@ -86,7 +105,7 @@ export function createVmCard({ vm, busyAction = null, onStart, onStop }) {
       "data-state": state,
       "aria-label": text(vm.name, "Machine"),
     },
-    children: [header, specs, lastError, missingDisk, footer],
+    children: [header, specs, lastError, missingDisk, media, footer],
   });
 }
 

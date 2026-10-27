@@ -108,7 +108,7 @@ export function createDashboardPage({ store, setPageHeader }) {
         children: [
           element("strong", { text: "Build scope" }),
           element("p", {
-            text: "Guest OS installation is not available yet. Running machines can be opened in the console view. Installation media is a planned feature.",
+            text: "Attach a local ISO to a stopped machine from its details or the Installation media page. Running machines can be opened in the console view.",
           }),
         ],
       }),
@@ -259,7 +259,7 @@ export function createDashboardPage({ store, setPageHeader }) {
           eyebrow: "No machines yet",
           title: "Create your first machine.",
           description:
-            "Choose a name, memory, CPU count, and disk size. Wave VM creates the QCOW2 disk and manages the real QEMU process. No operating system is installed yet.",
+            "Choose a name, memory, CPU count, and disk size, optionally attach a local ISO, and Wave VM creates the QCOW2 disk and manages the real QEMU process.",
           facts: [
             "Real QEMU lifecycle",
             "Local QCOW2 disks",

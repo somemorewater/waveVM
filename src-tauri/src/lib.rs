@@ -12,6 +12,14 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .on_permission_request(|_webview, permission| {
+            if permission == tauri::webview::PermissionKind::PointerLock {
+                tauri::webview::PermissionResponse::Allow
+            } else {
+                tauri::webview::PermissionResponse::Default
+            }
+        })
         .setup(|app| {
             app.manage(state::AppState::initialize(app.handle()));
             Ok(())
@@ -23,7 +31,12 @@ pub fn run() {
             commands::vm::create_vm,
             commands::vm::start_vm,
             commands::vm::stop_vm,
-            commands::vm::get_vm_console
+            commands::vm::get_vm_console,
+            commands::media::pick_iso_file,
+            commands::media::set_vm_install_iso,
+            commands::media::set_vm_boot_mode,
+            commands::window::set_window_fullscreen,
+            commands::window::get_window_fullscreen
         ])
         .build(tauri::generate_context!())
         .expect("error while building Wave VM");

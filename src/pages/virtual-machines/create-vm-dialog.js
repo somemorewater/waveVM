@@ -1,5 +1,10 @@
 import { element } from "../../utils/dom.js";
-import { formatBytes, formatCount, formatDisk } from "../../utils/format.js";
+import {
+  fileName,
+  formatBytes,
+  formatCount,
+  formatDisk,
+} from "../../utils/format.js";
 import {
   appendAlert,
   clearAlerts,
@@ -15,6 +20,7 @@ import {
 } from "../../components/form-controls.js";
 import { openModal } from "../../components/modal.js";
 import { normalizeError } from "../../services/tauri.js";
+import { pickIsoFile } from "../../services/vm-service.js";
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * 1024 * 1024;
@@ -22,6 +28,8 @@ const GIB = 1024 * 1024 * 1024;
 export function openCreateVmDialog({ store, onCreated = null, onClose = null }) {
   let touched = false;
   let busy = false;
+  let pickingIso = false;
+  let selectedIsoPath = null;
   let unsupportedHost = false;
   let unsubscribe = () => {};
 
@@ -78,6 +86,45 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
     text: "A thin-provisioned QCOW2 disk is created.",
   });
 
+  const isoName = element("span", {
+    className: "iso-picker-name",
+    text: "No ISO selected",
+  });
+  const isoDetail = element("span", {
+    className: "iso-picker-detail",
+    text: "Optional. Choose an existing .iso file to boot the installer.",
+  });
+  const chooseIso = button({
+    label: "Choose ISO…",
+    iconName: "folder",
+    small: true,
+    onClick: () => selectIso(),
+  });
+  const clearIso = button({
+    label: "Remove",
+    variant: "ghost",
+    small: true,
+    disabled: true,
+    onClick: () => {
+      selectedIsoPath = null;
+      renderIso();
+    },
+  });
+  const isoPicker = element("div", {
+    className: "iso-picker",
+    attrs: { id: "vm-iso" },
+    children: [
+      element("div", {
+        className: "iso-picker-summary",
+        children: [isoName, isoDetail],
+      }),
+      element("div", {
+        className: "iso-picker-actions",
+        children: [chooseIso, clearIso],
+      }),
+    ],
+  });
+
   const form = element("form", {
     className: "vm-create-form",
     attrs: { id: "vm-create-form", novalidate: true },
@@ -113,10 +160,16 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
             control: disk,
             hint: diskHint,
           }),
+          formField({
+            label: "Installation ISO (optional)",
+            control: isoPicker,
+            hint: "The ISO is used read-only and is never copied or modified by Wave VM.",
+            wide: true,
+          }),
         ],
       }),
       formNote(
-        "Wave VM creates a blank QCOW2 disk in the application data directory. No guest operating system or installation media is included in this build.",
+        "Wave VM creates a blank QCOW2 disk in the application data directory. If you attach an ISO, the first start boots the installer. Switch to disk boot after installing the guest operating system.",
       ),
     ],
   });
@@ -139,7 +192,7 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
   const modal = openModal({
     title: "New machine",
     description:
-      "Create a local machine with a blank QCOW2 disk. Nothing is downloaded.",
+      "Create a local machine with a QCOW2 disk and optional installation ISO. Nothing is downloaded.",
     content: form,
     actions: [cancel, submit],
     initialFocus: name,
@@ -153,6 +206,8 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
     busy = value;
     submit.disabled = value || unsupportedHost;
     cancel.disabled = value;
+    chooseIso.disabled = value || pickingIso;
+    clearIso.disabled = value || pickingIso || !selectedIsoPath;
     modal.setDismissible(!value);
 
     const label = submit.querySelector("span");
@@ -162,6 +217,54 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
 
     for (const control of form.querySelectorAll("input, select")) {
       control.disabled = value;
+    }
+  }
+
+  function renderIso() {
+    isoName.textContent = selectedIsoPath
+      ? fileName(selectedIsoPath)
+      : "No ISO selected";
+    isoDetail.textContent = selectedIsoPath
+      ? selectedIsoPath
+      : "Optional. Choose an existing .iso file to boot the installer.";
+
+    const label = chooseIso.querySelector("span");
+    if (label) {
+      label.textContent = selectedIsoPath ? "Replace ISO…" : "Choose ISO…";
+    }
+
+    chooseIso.disabled = busy || pickingIso;
+    clearIso.disabled = busy || pickingIso || !selectedIsoPath;
+  }
+
+  async function selectIso() {
+    if (busy || pickingIso) {
+      return;
+    }
+
+    clearAlerts(formAlert);
+    pickingIso = true;
+    renderIso();
+
+    try {
+      const path = await pickIsoFile();
+
+      if (!path) {
+        return;
+      }
+
+      selectedIsoPath = path;
+    } catch (error) {
+      const normalized = normalizeError(error);
+      appendAlert(formAlert, {
+        severity: "error",
+        title: "ISO could not be selected",
+        message: normalized.message,
+        code: normalized.code,
+      });
+    } finally {
+      pickingIso = false;
+      renderIso();
     }
   }
 
@@ -269,6 +372,7 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
       memoryMib: Number(memory.value),
       vcpus: Number(vcpus.value),
       diskSizeGib: Number(disk.value),
+      installIsoPath: selectedIsoPath,
     };
   }
 

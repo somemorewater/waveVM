@@ -76,7 +76,7 @@ export function createVirtualMachinesPage({ store, setPageHeader }) {
         children: [
           element("strong", { text: "Current scope" }),
           element("p", {
-            text: "Guest OS installation, editing, deletion, snapshots, and networking are not available in this build. Running machines can be opened in the console view.",
+            text: "A local ISO can be attached to a stopped machine as installation media. Image downloads, editing other configuration, deletion, snapshots, and networking are not available in this build.",
           }),
         ],
       }),
@@ -102,9 +102,13 @@ export function createVirtualMachinesPage({ store, setPageHeader }) {
         notice = {
           severity: "info",
           title: "Machine created",
-          message: `${vm.name} is configured with a ${formatDisk(
-            vm.diskSizeGib,
-          )} QCOW2 disk. Start it when you are ready.`,
+          message: vm.installIsoPath
+            ? `${vm.name} is configured with a ${formatDisk(
+                vm.diskSizeGib,
+              )} QCOW2 disk and will boot its installer ISO on first start.`
+            : `${vm.name} is configured with a ${formatDisk(
+                vm.diskSizeGib,
+              )} QCOW2 disk. Start it when you are ready.`,
         };
         renderAlerts(store.getState());
       },
@@ -197,6 +201,9 @@ export function createVirtualMachinesPage({ store, setPageHeader }) {
         vm.memoryMib,
         vm.vcpus,
         vm.diskSizeGib,
+        vm.installIsoPath,
+        vm.installIsoAvailable,
+        vm.bootMode,
         vm.updatedAtUnix,
       ]),
     ]);

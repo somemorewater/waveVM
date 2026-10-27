@@ -44,6 +44,7 @@ pub fn launch(
     qemu_path: &Path,
     disk_path: &Path,
     kvm_usable: bool,
+    install_iso: Option<&Path>,
 ) -> Result<RunningVm, VmError> {
     let vm_dir = disk_path.parent().ok_or_else(|| {
         VmError::Start("the virtual disk path has no parent directory".to_string())
@@ -90,7 +91,15 @@ pub fn launch(
     let mut kvm_error = None;
 
     for (index, accelerator) in accelerators.iter().enumerate() {
-        match launch_once(vm, qemu_path, disk_path, &qmp_path, &log_path, accelerator) {
+        match launch_once(
+            vm,
+            qemu_path,
+            disk_path,
+            &qmp_path,
+            &log_path,
+            accelerator,
+            install_iso,
+        ) {
             Ok(running) => return Ok(running),
             Err(error) => {
                 if *accelerator == "kvm" && index + 1 < accelerators.len() {
@@ -121,6 +130,7 @@ fn launch_once(
     qmp_path: &Path,
     log_path: &Path,
     accelerator: &str,
+    install_iso: Option<&Path>,
 ) -> Result<RunningVm, VmError> {
     let mut log = OpenOptions::new()
         .create(true)
@@ -150,6 +160,10 @@ fn launch_once(
     let drive = format!("file={},if=virtio,format=qcow2", disk_path.display());
     let qmp = format!("unix:{},server=on,wait=off", qmp_path.display());
 
+    if let Some(iso) = install_iso {
+        validate_qemu_path(iso, "installation ISO path")?;
+    }
+
     let mut command = Command::new(qemu_path);
     command
         .arg("-name")
@@ -163,7 +177,22 @@ fn launch_once(
         .arg("-smp")
         .arg(vm.vcpus.to_string())
         .arg("-drive")
-        .arg(drive)
+        .arg(drive);
+
+    if let Some(iso) = install_iso {
+        command
+            .arg("-drive")
+            .arg(format!(
+                "file={},media=cdrom,readonly=on,format=raw",
+                iso.display()
+            ))
+            .arg("-boot")
+            .arg("order=d");
+    } else {
+        command.arg("-boot").arg("order=c");
+    }
+
+    command
         .arg("-nic")
         .arg("none")
         .arg("-vnc")

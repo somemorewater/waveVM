@@ -1,4 +1,5 @@
 pub mod disk;
+pub mod media;
 pub mod runtime;
 mod validate;
 
@@ -20,6 +21,14 @@ pub enum VmState {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BootMode {
+    Installer,
+    #[default]
+    Disk,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VmConfig {
@@ -33,6 +42,10 @@ pub struct VmConfig {
     pub state: VmState,
     #[serde(default)]
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub install_iso_path: Option<String>,
+    #[serde(default)]
+    pub boot_mode: BootMode,
     pub created_at_unix: u64,
     pub updated_at_unix: u64,
 }
@@ -45,6 +58,8 @@ pub struct CreateVmInput {
     pub memory_mib: u32,
     pub vcpus: u32,
     pub disk_size_gib: u32,
+    #[serde(default)]
+    pub install_iso_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,6 +76,9 @@ pub struct VmSummary {
     pub last_error: Option<String>,
     pub acceleration: Option<String>,
     pub disk_exists: bool,
+    pub install_iso_path: Option<String>,
+    pub install_iso_available: bool,
+    pub boot_mode: BootMode,
     pub created_at_unix: u64,
     pub updated_at_unix: u64,
 }
@@ -79,6 +97,13 @@ impl VmSummary {
             last_error: vm.last_error.clone(),
             acceleration,
             disk_exists: std::path::Path::new(&vm.disk_path).is_file(),
+            install_iso_path: vm.install_iso_path.clone(),
+            install_iso_available: vm
+                .install_iso_path
+                .as_deref()
+                .map(media::iso_available)
+                .unwrap_or(false),
+            boot_mode: vm.boot_mode,
             created_at_unix: vm.created_at_unix,
             updated_at_unix: vm.updated_at_unix,
         }

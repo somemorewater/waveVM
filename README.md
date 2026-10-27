@@ -6,9 +6,9 @@ Wave VM is a free, open-source desktop application for creating and managing vir
 
 ## Current status
 
-This is **Milestone 2: First Real VM Lifecycle**. It builds on the desktop foundation with real VM configuration, QCOW2 disk creation, QEMU process start/stop, persistent VM definitions, accurate lifecycle state, and a genuine guest console for running machines.
+This is **Milestone 4: Local ISO Installation Support**. It builds on the real VM lifecycle with local ISO selection, persistent installation media, read-only CD/DVD attachment for installer boot, and an explicit switch back to disk boot after installation.
 
-Wave VM **cannot install or boot a guest operating system yet**. ISO handling, image downloads, networking, USB passthrough, and snapshots are intentionally not part of this milestone. A configured disk is blank until an operating system is installed in a later milestone. A running machine can still be opened in the console view, which displays the actual guest framebuffer over loopback-only QEMU VNC.
+Wave VM can boot a user-supplied local ISO and display the real installer through the existing console. It does not download images, provide an online OS catalogue, or detect installation completion. Image downloads, networking, USB passthrough, and snapshots remain outside this milestone. A running machine can be opened in the console view, which displays the actual guest framebuffer over loopback-only QEMU VNC.
 
 ## What works
 
@@ -22,9 +22,12 @@ Wave VM **cannot install or boot a guest operating system yet**. ISO handling, i
 - Starting a real QEMU process with the configured resources, KVM when verified usable, and a TCG fallback.
 - QMP lifecycle control over a private Unix socket. The guest console uses QEMU VNC bound to `127.0.0.1` with a per-run password; no public QMP endpoint or guest network device is exposed.
 - An interactive guest console using QEMU's WebSocket VNC transport and bundled noVNC 1.7.0. The WebSocket port is discovered through QMP, and the console password is generated per run and kept in memory only.
+- An immersive console mode that uses the native Tauri window, hides the application shell, and rescales the guest display through noVNC. F11 or the on-screen fullscreen control toggles fullscreen. Mouse capture uses the webview Pointer Lock API after an explicit control is activated; Esc releases capture and returns keyboard focus to the host.
 - Stopping a VM with `system_powerdown`, a QMP `quit` fallback, and bounded process termination fallbacks.
 - Tracking the child process, preventing duplicate launches, detecting unexpected exits through polling, and reconciling persisted state.
-- Versioned `config.json` stored in the platform application data directory, written atomically with restrictive permissions on Unix. Schema version 2 stores VM definitions.
+- Selecting an existing local ISO through the native Tauri file dialog, with Rust-side validation of the absolute path, regular-file type, `.iso` extension, and readability. The ISO is never copied, modified, or deleted.
+- Attaching, replacing, or detaching installation media only while a machine is stopped. Installer boot attaches the ISO as a read-only CD/DVD and boots it first; disk boot starts the QCOW2 disk without the installer.
+- Versioned `config.json` stored in the platform application data directory, written atomically with restrictive permissions on Unix. Schema version 3 stores VM definitions, optional installation media, and the boot mode; version 2 configurations migrate automatically.
 - A `vms/` directory containing each machine's disk and QEMU log.
 
 ## Brand assets
@@ -76,9 +79,9 @@ Tauri resolves the application data directory from the bundle identifier `com.wa
 The application creates:
 
 ```text
-config.json             # versioned application configuration (schema v2)
+config.json             # versioned application configuration (schema v3)
 vms/<machine-id>/       # one directory per machine
-  disk.qcow2            # blank QCOW2 virtual disk
+  disk.qcow2            # QCOW2 virtual disk
   qemu.log              # latest QEMU run log
 ```
 
@@ -116,8 +119,12 @@ The Rust backend owns host detection, VM validation, persistence, disk creation,
 
 - VM lifecycle operations are currently supported on Linux x86_64 only. Other hosts are reported as unsupported before files or processes are created.
 - QEMU and `qemu-img` must be installed for VM operations. The shell still starts and reports their status when they are missing.
-- No guest operating system installation, ISO handling, image downloads, networking, USB passthrough, or snapshots yet. A guest operating system must be installed separately before the console can show a bootable guest.
-- The console depends on QEMU WebSocket VNC support and is available only while the machine is running. It is bound to loopback and protected by a per-run password.
+- Installation media must be a local `.iso` file. Wave VM does not download images, verify checksums, manage a media catalogue, or detect when a guest installation has completed; switching from installer boot to disk boot is a deliberate user action.
+- ISO paths containing commas, newlines, or carriage returns are rejected because they cannot be passed safely through QEMU's option parser.
+- The virtual disk is attached with virtio-blk. An installer without a virtio storage driver, including some Windows installers, may not see the disk unless those drivers are supplied by the guest image or an additional driver medium. This milestone does not provide driver media.
+- QEMU runs with `-no-reboot`, so a guest-requested restart exits the process instead of rebooting automatically. Start the machine again after changing boot mode.
+- Image downloads, networking, USB passthrough, and snapshots are not implemented.
+- The console depends on QEMU WebSocket VNC support and is available only while the machine is running. It is bound to loopback and protected by a per-run password. Fullscreen and pointer lock depend on the desktop webview. While pointer lock is active, the browser reserves Escape and routes pointer clicks to the guest, so Esc is the reliable release path; the visible mouse control shows the captured state and becomes clickable once capture ends. After release, click the guest to resume input and Escape will reach the guest again. Ctrl+Alt is not used because it is a guest keyboard combination. Pointer accuracy depends on the guest's configured pointing device.
 - KVM acceleration is used only when the probe verifies `/dev/kvm`; otherwise QEMU uses software emulation (TCG) and may be slow.
 - There is no UI for editing or deleting machines. Existing disks and VM directories are preserved.
 - Normal application exit stops tracked QEMU processes. If the desktop process is force-killed, cleanup guarantees do not apply to an already running child process.

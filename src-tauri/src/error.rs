@@ -13,6 +13,9 @@ pub enum AppError {
 
     #[error("background task failed: {0}")]
     Task(String),
+
+    #[error("window operation failed: {0}")]
+    Window(String),
 }
 
 impl AppError {
@@ -21,6 +24,7 @@ impl AppError {
             Self::Config(error) => error.code(),
             Self::Vm(error) => error.code(),
             Self::Task(_) => "background_task_failed",
+            Self::Window(_) => "window_operation_failed",
         }
     }
 }

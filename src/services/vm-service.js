@@ -19,3 +19,15 @@ export function stopVm(id) {
 export function getVmConsole(id) {
   return invoke("get_vm_console", { id });
 }
+
+export function pickIsoFile() {
+  return invoke("pick_iso_file");
+}
+
+export function setVmInstallIso(id, path) {
+  return invoke("set_vm_install_iso", { id, path });
+}
+
+export function setVmBootMode(id, bootMode) {
+  return invoke("set_vm_boot_mode", { id, bootMode });
+}
