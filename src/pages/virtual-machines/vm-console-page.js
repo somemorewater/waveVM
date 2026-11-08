@@ -1210,6 +1210,17 @@ export function createVmConsolePage({ store, setPageHeader }, id) {
 
     const actions = [backLink()];
 
+    if (vm) {
+      actions.push(
+        buttonLink({
+          label: "Logs",
+          href: `#/machines/${id}/logs`,
+          iconName: "log",
+          small: true,
+        }),
+      );
+    }
+
     if (vm?.state === "running") {
       actions.push(
         button({

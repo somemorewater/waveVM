@@ -100,6 +100,39 @@ export function createSettingsPage({ store, setPageHeader }) {
         className: "page-section",
         children: [
           sectionHeading({
+            eyebrow: "Networking",
+            title: "How guest networking works",
+            description:
+              "NAT is enabled by default for new machines. Networking settings are stored with each machine.",
+          }),
+          createPanel({
+            title: "QEMU user-mode NAT",
+            description: "The only networking mode implemented in this build.",
+            body: [
+              element("p", {
+                className: "panel-copy",
+                text: "Guests see a VirtIO Ethernet adapter rather than the host's Wi-Fi or Ethernet device. QEMU runs a small DHCP server and DNS forwarder, so common Linux guests obtain an address and resolver automatically.",
+              }),
+              element("p", {
+                className: "panel-copy",
+                text: "NAT lets the guest open outbound connections through the host's current internet connection. It does not require a bridge, TAP device, host networking service change, or guest Wi-Fi setup.",
+              }),
+              element("p", {
+                className: "panel-copy",
+                text: "Inbound connections from the host or external network are not supported without port forwarding, which this build does not configure. Bridged, isolated, and custom networking are planned but not selectable.",
+              }),
+              element("p", {
+                className: "panel-note",
+                text: "Wave VM does not verify guest internet access. If the host disconnects, the guest keeps its configuration and may recover when the host reconnects, depending on QEMU and the host network stack.",
+              }),
+            ],
+          }),
+        ],
+      }),
+      element("section", {
+        className: "page-section",
+        children: [
+          sectionHeading({
             eyebrow: "Application",
             title: "Application information",
             description:

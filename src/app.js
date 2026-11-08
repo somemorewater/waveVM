@@ -7,6 +7,7 @@ import { createStoragePage } from "./pages/storage/storage-page.js";
 import { createVirtualMachinesPage } from "./pages/virtual-machines/virtual-machines-page.js";
 import { createVmConsolePage } from "./pages/virtual-machines/vm-console-page.js";
 import { createVmDetailsPage } from "./pages/virtual-machines/vm-details-page.js";
+import { createVmLogsPage } from "./pages/virtual-machines/vm-logs-page.js";
 import { createRouter } from "./router.js";
 import { initTheme } from "./services/settings-service.js";
 import { createAppStore } from "./state/app-store.js";
@@ -92,6 +93,9 @@ router = createRouter({
           break;
         case "vm-console":
           page = createVmConsolePage(context, params.id);
+          break;
+        case "vm-logs":
+          page = createVmLogsPage(context, params.id);
           break;
         case "vm-details":
           page = createVmDetailsPage(context, params.id);

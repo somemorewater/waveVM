@@ -5,7 +5,8 @@ use tauri::{AppHandle, Manager};
 
 use crate::config::{ConfigError, ConfigStore};
 use crate::error::AppError;
-use crate::vm::runtime::RunningVm;
+use crate::vm::log::{self, LogSeverity};
+use crate::vm::runtime::{RunningVm, StopReason};
 use crate::vm::{runtime as vm_runtime, unix_now, VmState};
 
 pub struct AppInner {
@@ -29,6 +30,26 @@ impl AppState {
             })
             .and_then(ConfigStore::initialize)
             .and_then(|mut store| {
+                let stale_ids: Vec<String> = store
+                    .vms()
+                    .iter()
+                    .filter(|vm| {
+                        matches!(
+                            vm.state,
+                            VmState::Starting | VmState::Running | VmState::Stopping
+                        )
+                    })
+                    .map(|vm| vm.id.clone())
+                    .collect();
+
+                for id in stale_ids {
+                    let logs_dir = store.vms_dir().join(&id).join("logs");
+                    log::mark_untracked_sessions(
+                        &logs_dir,
+                        "Wave VM was not tracking this session when the application started. The QEMU process may have exited or may still be running.",
+                    );
+                }
+
                 if store.normalize_stale_vm_states() {
                     store.save()?;
                 }
@@ -70,12 +91,16 @@ impl AppState {
 
         for id in ids {
             if let Some(mut running) = inner.runtime.remove(&id) {
-                let outcome = vm_runtime::stop(&mut running);
+                let outcome = vm_runtime::stop(&mut running, StopReason::ApplicationShutdown);
                 if let Some(vm) = inner.store.vm_mut(&id) {
                     match outcome {
-                        Ok(_) => {
+                        Ok(outcome) => {
                             vm.state = VmState::Stopped;
-                            vm.last_error = None;
+                            vm.last_error = if outcome.termination.severity == LogSeverity::Error {
+                                Some(outcome.termination.summary)
+                            } else {
+                                None
+                            };
                         }
                         Err(error) => {
                             vm.state = VmState::Error;

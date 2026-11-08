@@ -76,7 +76,7 @@ export function createVirtualMachinesPage({ store, setPageHeader }) {
         children: [
           element("strong", { text: "Current scope" }),
           element("p", {
-            text: "A local ISO can be attached to a stopped machine as installation media. Image downloads, editing other configuration, deletion, snapshots, and networking are not available in this build.",
+            text: "New machines use NAT networking by default, and installation media or networking can be changed on a stopped machine. Image downloads, bridged networking, editing other configuration, deletion, and snapshots are not available in this build.",
           }),
         ],
       }),
@@ -204,6 +204,9 @@ export function createVirtualMachinesPage({ store, setPageHeader }) {
         vm.installIsoPath,
         vm.installIsoAvailable,
         vm.bootMode,
+        vm.network?.enabled,
+        vm.network?.mode,
+        vm.network?.adapter,
         vm.updatedAtUnix,
       ]),
     ]);

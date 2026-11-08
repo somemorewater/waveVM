@@ -125,6 +125,35 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
     ],
   });
 
+  const networkEnabled = element("input", {
+    attrs: {
+      id: "vm-network-enabled",
+      name: "networkEnabled",
+      type: "checkbox",
+      checked: true,
+    },
+  });
+  const networkField = element("div", {
+    className: "form-field form-field-wide",
+    children: [
+      element("span", { className: "field-label", text: "Networking" }),
+      element("label", {
+        className: "checkbox-control",
+        attrs: { for: "vm-network-enabled" },
+        children: [
+          networkEnabled,
+          element("span", {
+            text: "Connect this machine to the internet (NAT)",
+          }),
+        ],
+      }),
+      element("span", {
+        className: "field-hint",
+        text: "Uses QEMU user-mode NAT with a VirtIO Ethernet adapter. The guest receives DHCP and DNS automatically; no bridge, TAP device, or guest Wi-Fi setup is required.",
+      }),
+    ],
+  });
+
   const form = element("form", {
     className: "vm-create-form",
     attrs: { id: "vm-create-form", novalidate: true },
@@ -166,10 +195,11 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
             hint: "The ISO is used read-only and is never copied or modified by Wave VM.",
             wide: true,
           }),
+          networkField,
         ],
       }),
       formNote(
-        "Wave VM creates a blank QCOW2 disk in the application data directory. If you attach an ISO, the first start boots the installer. Switch to disk boot after installing the guest operating system.",
+        "Wave VM creates a blank QCOW2 disk in the application data directory. Networking uses QEMU user-mode NAT by default. If you attach an ISO, the first start boots the installer. Switch to disk boot after installing the guest operating system.",
       ),
     ],
   });
@@ -373,6 +403,7 @@ export function openCreateVmDialog({ store, onCreated = null, onClose = null }) 
       vcpus: Number(vcpus.value),
       diskSizeGib: Number(disk.value),
       installIsoPath: selectedIsoPath,
+      networkEnabled: networkEnabled.checked,
     };
   }
 

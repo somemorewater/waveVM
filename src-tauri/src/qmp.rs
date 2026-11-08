@@ -34,6 +34,7 @@ mod platform {
     pub struct QmpClient {
         stream: UnixStream,
         reader: BufReader<UnixStream>,
+        events: Vec<Value>,
     }
 
     impl QmpClient {
@@ -52,9 +53,17 @@ mod platform {
                 ));
             }
 
-            let mut client = Self { stream, reader };
+            let mut client = Self {
+                stream,
+                reader,
+                events: Vec::new(),
+            };
             client.execute("qmp_capabilities", None)?;
             Ok(client)
+        }
+
+        pub fn take_events(&mut self) -> Vec<Value> {
+            std::mem::take(&mut self.events)
         }
 
         pub fn execute(
@@ -89,6 +98,78 @@ mod platform {
                 }
 
                 // QMP events can arrive between a request and its response.
+                if message.get("event").is_some() {
+                    self.events.push(message);
+                }
+            }
+        }
+    }
+
+    pub struct QmpMonitor {
+        reader: BufReader<UnixStream>,
+    }
+
+    impl QmpMonitor {
+        pub fn connect(path: &Path) -> Result<Self, QmpError> {
+            let mut stream = UnixStream::connect(path)?;
+            stream.set_read_timeout(Some(Duration::from_millis(750)))?;
+            stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+
+            let reader_stream = stream.try_clone()?;
+            let mut reader = BufReader::new(reader_stream);
+            let greeting = read_message(&mut reader)?;
+
+            if greeting.get("QMP").is_none() {
+                return Err(QmpError::Protocol(
+                    "the endpoint did not send a QMP greeting".to_string(),
+                ));
+            }
+
+            let request = json!({ "execute": "qmp_capabilities" });
+            let mut line = serde_json::to_string(&request)
+                .map_err(|error| QmpError::Protocol(error.to_string()))?;
+            line.push('\n');
+            stream.write_all(line.as_bytes())?;
+            stream.flush()?;
+
+            loop {
+                let message = read_message(&mut reader)?;
+
+                if let Some(error) = message.get("error") {
+                    let description = error
+                        .get("desc")
+                        .and_then(Value::as_str)
+                        .unwrap_or("QEMU rejected the QMP capabilities request");
+                    return Err(QmpError::Command(description.to_string()));
+                }
+
+                if message.get("return").is_some() {
+                    break;
+                }
+            }
+
+            Ok(Self { reader })
+        }
+
+        /// Returns the next QMP event, or `None` when the read timed out.
+        pub fn next_event(&mut self) -> Result<Option<Value>, QmpError> {
+            loop {
+                match read_message(&mut self.reader) {
+                    Ok(message) => {
+                        if message.get("event").is_some() {
+                            return Ok(Some(message));
+                        }
+                    }
+                    Err(QmpError::Io(error))
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) =>
+                    {
+                        return Ok(None);
+                    }
+                    Err(error) => return Err(error),
+                }
             }
         }
     }
@@ -108,7 +189,7 @@ mod platform {
 }
 
 #[cfg(unix)]
-pub use platform::QmpClient;
+pub use platform::{QmpClient, QmpMonitor};
 
 #[cfg(not(unix))]
 pub struct QmpClient;
@@ -124,6 +205,24 @@ impl QmpClient {
         _command: &str,
         _arguments: Option<Value>,
     ) -> Result<Value, QmpError> {
+        Err(QmpError::Unsupported)
+    }
+
+    pub fn take_events(&mut self) -> Vec<Value> {
+        Vec::new()
+    }
+}
+
+#[cfg(not(unix))]
+pub struct QmpMonitor;
+
+#[cfg(not(unix))]
+impl QmpMonitor {
+    pub fn connect(_path: &Path) -> Result<Self, QmpError> {
+        Err(QmpError::Unsupported)
+    }
+
+    pub fn next_event(&mut self) -> Result<Option<Value>, QmpError> {
         Err(QmpError::Unsupported)
     }
 }

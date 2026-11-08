@@ -20,6 +20,8 @@ import {
   formatDisk,
   formatMemory,
   formatTimestamp,
+  networkAdapterLabel,
+  networkModeLabel,
   vmStateLabel,
   vmStateTone,
 } from "../../utils/format.js";
@@ -33,6 +35,7 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
   let notice = null;
   let busyAction = null;
   let mediaBusy = null;
+  let networkBusy = null;
   let headerKey = "";
   let contentKey = "";
   let destroyed = false;
@@ -80,6 +83,49 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
     return Boolean(
       vm && !["starting", "running", "stopping"].includes(vm.state),
     );
+  }
+
+  function networkEditable(vm) {
+    return Boolean(
+      vm && !["starting", "running", "stopping"].includes(vm.state),
+    );
+  }
+
+  function networkConfig(vm) {
+    return vm.network || { enabled: true, mode: "nat", adapter: "virtio" };
+  }
+
+  async function toggleNetwork(vm) {
+    if (networkBusy || !networkEditable(vm)) {
+      return;
+    }
+
+    const enabling = !networkConfig(vm).enabled;
+    networkBusy = "toggle";
+    notice = null;
+    render(current);
+
+    try {
+      const updated = await store.setVmNetworkEnabled(vm.id, enabling);
+      notice = {
+        severity: "info",
+        title: enabling ? "Networking enabled" : "Networking disabled",
+        message: enabling
+          ? `${updated.name} will attach a NAT Ethernet adapter on its next start.`
+          : `${updated.name} will start without a virtual network adapter.`,
+      };
+    } catch (error) {
+      const normalized = normalizeError(error);
+      notice = {
+        severity: "error",
+        title: "Networking could not be changed",
+        message: normalized.message,
+        code: normalized.code,
+      };
+    } finally {
+      networkBusy = null;
+      render(current);
+    }
   }
 
   async function chooseMedia(vm) {
@@ -208,6 +254,15 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
         }),
       );
     }
+
+    actions.push(
+      buttonLink({
+        label: "Logs",
+        href: `#/machines/${vm.id}/logs`,
+        iconName: "log",
+        small: true,
+      }),
+    );
 
     return actions;
   }
@@ -426,7 +481,7 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
 
     return element("div", {
       className: "vm-details-grid",
-      children: [overview, storage, media, lifecycle],
+      children: [overview, networkPanel(vm), storage, media, lifecycle],
     });
   }
 
@@ -578,13 +633,96 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
     });
   }
 
+  function networkPanel(vm) {
+    const network = networkConfig(vm);
+    const editable = networkEditable(vm);
+    const pending = Boolean(networkBusy);
+    const enabled = Boolean(network.enabled);
+
+    const notes = [
+      element("p", {
+        className: "panel-copy",
+        text: "Guests see a virtual Ethernet adapter, not the host's Wi-Fi or Ethernet device. QEMU's built-in DHCP service assigns the guest address and forwards DNS queries through the host, so no bridge, TAP device, or guest Wi-Fi configuration is needed.",
+      }),
+    ];
+
+    if (enabled) {
+      notes.push(
+        element("p", {
+          className: "panel-copy",
+          text: "NAT is the default because it works without changing host networking and lets the guest reach the internet through the host's current connection. QEMU user-mode networking supports outbound connections; inbound connections require port forwarding, which this build does not configure.",
+        }),
+        element("p", {
+          className: "panel-note",
+          text: "Host connectivity is not verified. If the host temporarily disconnects, the guest keeps its address and may reconnect when the host network returns, but recovery depends on QEMU and the host network stack. Common Linux guests include the VirtIO network driver; guests without it may not detect the adapter.",
+        }),
+      );
+    } else {
+      notes.push(
+        element("p", {
+          className: "vm-card-note",
+          text: "No virtual network adapter will be attached. The guest will have no network access until networking is enabled and the machine is started again.",
+        }),
+      );
+    }
+
+    if (!editable) {
+      notes.push(
+        element("p", {
+          className: "panel-note",
+          text: "Stop the machine before changing networking. A running QEMU process is never modified.",
+        }),
+      );
+    }
+
+    return createPanel({
+      title: "Networking",
+      description:
+        "NAT through QEMU user-mode networking. Bridged, isolated, and custom modes are planned but not available.",
+      wide: true,
+      body: [
+        createDetailList([
+          {
+            label: "Networking",
+            value: statusIndicator({
+              label: enabled ? "Enabled" : "Disabled",
+              tone: enabled ? "ok" : "neutral",
+            }),
+          },
+          { label: "Mode", value: networkModeLabel(network.mode) },
+          {
+            label: "Virtual adapter",
+            value: `${networkAdapterLabel(network.adapter)} Ethernet`,
+          },
+        ]),
+        ...notes,
+        element("div", {
+          className: "media-actions",
+          children: [
+            button({
+              label: pending
+                ? "Applying…"
+                : enabled
+                  ? "Disable networking"
+                  : "Enable networking",
+              variant: enabled ? "ghost" : "",
+              small: true,
+              disabled: pending || !editable,
+              onClick: () => toggleNetwork(vm),
+            }),
+          ],
+        }),
+      ],
+    });
+  }
+
   function scopeNote() {
     return element("aside", {
       className: "inline-note",
       children: [
         element("strong", { text: "Current scope" }),
         element("p", {
-          text: "Installation media can be attached to a stopped machine. Editing other configuration, deleting machines, snapshots, and networking remain outside this build.",
+          text: "Installation media and networking can be changed on a stopped machine. Bridged networking, editing other configuration, deleting machines, and snapshots remain outside this build.",
         }),
       ],
     });
@@ -614,7 +752,11 @@ export function createVmDetailsPage({ store, setPageHeader }, id) {
       vm.installIsoPath,
       vm.installIsoAvailable,
       vm.bootMode,
+      vm.network?.enabled,
+      vm.network?.mode,
+      vm.network?.adapter,
       mediaBusy,
+      networkBusy,
     ]);
   }
 

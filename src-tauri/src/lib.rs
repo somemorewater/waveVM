@@ -32,9 +32,12 @@ pub fn run() {
             commands::vm::start_vm,
             commands::vm::stop_vm,
             commands::vm::get_vm_console,
+            commands::vm::get_vm_logs,
+            commands::vm::export_vm_log,
             commands::media::pick_iso_file,
             commands::media::set_vm_install_iso,
             commands::media::set_vm_boot_mode,
+            commands::network::set_vm_network_enabled,
             commands::window::set_window_fullscreen,
             commands::window::get_window_fullscreen
         ])

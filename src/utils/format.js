@@ -82,6 +82,17 @@ const ACCELERATION_LABELS = {
   tcg: "TCG software emulation",
 };
 
+const NETWORK_MODE_LABELS = {
+  nat: "NAT",
+  bridged: "Bridged",
+  isolated: "Isolated",
+  custom: "Custom",
+};
+
+const NETWORK_ADAPTER_LABELS = {
+  virtio: "VirtIO",
+};
+
 export function formatBytes(bytes) {
   if (bytes === undefined || bytes === null || !Number.isFinite(bytes) || bytes < 0) {
     return "Unavailable";
@@ -208,6 +219,14 @@ export function accelerationLabel(value) {
 
 export function bootModeLabel(mode) {
   return mode === "installer" ? "Installer boot" : "Disk boot";
+}
+
+export function networkModeLabel(mode) {
+  return NETWORK_MODE_LABELS[mode] || "Unknown";
+}
+
+export function networkAdapterLabel(adapter) {
+  return NETWORK_ADAPTER_LABELS[adapter] || "Unknown";
 }
 
 export function fileName(path) {

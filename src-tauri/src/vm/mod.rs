@@ -1,4 +1,5 @@
 pub mod disk;
+pub mod log;
 pub mod media;
 pub mod runtime;
 mod validate;
@@ -29,6 +30,70 @@ pub enum BootMode {
     Disk,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkMode {
+    #[default]
+    Nat,
+    /// Planned mode. Rejected by validation and startup until implemented.
+    Bridged,
+    /// Planned mode. Rejected by validation and startup until implemented.
+    Isolated,
+    /// Planned mode. Rejected by validation and startup until implemented.
+    Custom,
+}
+
+impl NetworkMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Nat => "NAT",
+            Self::Bridged => "bridged",
+            Self::Isolated => "isolated",
+            Self::Custom => "custom",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkAdapter {
+    #[default]
+    Virtio,
+}
+
+impl NetworkAdapter {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Virtio => "VirtIO",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkConfig {
+    #[serde(default = "default_network_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub mode: NetworkMode,
+    #[serde(default)]
+    pub adapter: NetworkAdapter,
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_network_enabled(),
+            mode: NetworkMode::default(),
+            adapter: NetworkAdapter::default(),
+        }
+    }
+}
+
+fn default_network_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VmConfig {
@@ -46,6 +111,8 @@ pub struct VmConfig {
     pub install_iso_path: Option<String>,
     #[serde(default)]
     pub boot_mode: BootMode,
+    #[serde(default)]
+    pub network: NetworkConfig,
     pub created_at_unix: u64,
     pub updated_at_unix: u64,
 }
@@ -60,6 +127,12 @@ pub struct CreateVmInput {
     pub disk_size_gib: u32,
     #[serde(default)]
     pub install_iso_path: Option<String>,
+    #[serde(default = "default_network_enabled")]
+    pub network_enabled: bool,
+    #[serde(default)]
+    pub network_mode: NetworkMode,
+    #[serde(default)]
+    pub network_adapter: NetworkAdapter,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +152,7 @@ pub struct VmSummary {
     pub install_iso_path: Option<String>,
     pub install_iso_available: bool,
     pub boot_mode: BootMode,
+    pub network: NetworkConfig,
     pub created_at_unix: u64,
     pub updated_at_unix: u64,
 }
@@ -104,6 +178,7 @@ impl VmSummary {
                 .map(media::iso_available)
                 .unwrap_or(false),
             boot_mode: vm.boot_mode,
+            network: vm.network.clone(),
             created_at_unix: vm.created_at_unix,
             updated_at_unix: vm.updated_at_unix,
         }

@@ -1,6 +1,6 @@
 use crate::host::HostInfo;
 
-use super::{CreateVmInput, VmError, GUEST_ARCH};
+use super::{CreateVmInput, NetworkAdapter, NetworkConfig, NetworkMode, VmError, GUEST_ARCH};
 
 const MIN_MEMORY_MIB: u64 = 256;
 const MAX_MEMORY_MIB: u64 = 65_536;
@@ -15,6 +15,7 @@ pub struct ValidatedCreate {
     pub memory_mib: u32,
     pub vcpus: u32,
     pub disk_size_gib: u32,
+    pub network: NetworkConfig,
 }
 
 pub fn validate_create(input: &CreateVmInput, host: &HostInfo) -> Result<ValidatedCreate, VmError> {
@@ -81,12 +82,37 @@ pub fn validate_create(input: &CreateVmInput, host: &HostInfo) -> Result<Validat
         }
     }
 
+    let network = validate_network(input)?;
+
     Ok(ValidatedCreate {
         name,
         guest_arch: GUEST_ARCH.to_string(),
         memory_mib: input.memory_mib,
         vcpus: input.vcpus,
         disk_size_gib: input.disk_size_gib,
+        network,
+    })
+}
+
+fn validate_network(input: &CreateVmInput) -> Result<NetworkConfig, VmError> {
+    match input.network_mode {
+        NetworkMode::Nat => {}
+        mode => {
+            return Err(VmError::Validation(format!(
+                "the {} network mode is planned but not implemented; only NAT is available",
+                mode.label()
+            )));
+        }
+    }
+
+    match input.network_adapter {
+        NetworkAdapter::Virtio => {}
+    }
+
+    Ok(NetworkConfig {
+        enabled: input.network_enabled,
+        mode: input.network_mode,
+        adapter: input.network_adapter,
     })
 }
 

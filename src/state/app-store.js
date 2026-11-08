@@ -5,6 +5,7 @@ import {
   listVms,
   setVmBootMode as setVmBootModeRequest,
   setVmInstallIso as setVmInstallIsoRequest,
+  setVmNetworkEnabled as setVmNetworkEnabledRequest,
   startVm as startVmRequest,
   stopVm as stopVmRequest,
 } from "../services/vm-service.js";
@@ -211,6 +212,10 @@ export function createAppStore() {
     return applyVmUpdate(await setVmBootModeRequest(id, bootMode));
   }
 
+  async function setVmNetworkEnabled(id, enabled) {
+    return applyVmUpdate(await setVmNetworkEnabledRequest(id, enabled));
+  }
+
   function subscribe(listener) {
     listeners.add(listener);
 
@@ -255,6 +260,7 @@ export function createAppStore() {
     stopVm,
     setVmInstallIso,
     setVmBootMode,
+    setVmNetworkEnabled,
     destroy,
   };
 }

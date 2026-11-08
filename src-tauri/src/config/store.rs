@@ -13,7 +13,7 @@ use serde_json::Value;
 use super::ConfigError;
 use crate::vm::{VmConfig, VmState};
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,7 +131,7 @@ impl ConfigStore {
             ) {
                 vm.state = VmState::Error;
                 vm.last_error = Some(
-                    "Wave VM was not tracking this machine when the application started. Start it again to verify its state; an existing QEMU process will block a duplicate launch.".to_string(),
+                    "Wave VM was not tracking this machine when the application started. Its previous diagnostic log is preserved in the logs view. Start it again to verify its state; an existing QEMU process will block a duplicate launch.".to_string(),
                 );
                 vm.updated_at_unix = now;
                 changed = true;
@@ -178,7 +178,7 @@ fn load_config(path: &Path) -> Result<AppConfig, ConfigError> {
 fn migrate(config: &mut AppConfig, path: &Path) -> Result<(), ConfigError> {
     match config.schema_version {
         SCHEMA_VERSION => Ok(()),
-        0 | 1 | 2 => {
+        0 | 1 | 2 | 3 => {
             config.schema_version = SCHEMA_VERSION;
             Ok(())
         }

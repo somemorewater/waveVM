@@ -5,12 +5,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::error::AppError;
 use crate::host::{self, KvmStatus};
 use crate::qemu::ToolStatus;
 use crate::state::{AppInner, AppState};
-use crate::vm::runtime::ConsoleSession;
+use crate::vm::log::{self, LogComponent, LogSeverity, VmLogView};
+use crate::vm::runtime::{ConsoleSession, StopReason, Termination};
 use crate::vm::{
     self, disk, media, runtime, BootMode, CreateVmInput, VmConfig, VmError, VmState, VmSummary,
 };
@@ -20,7 +22,7 @@ static NEXT_VM_ID: AtomicU64 = AtomicU64::new(0);
 enum RuntimeCheck {
     NotRunning,
     Running { acceleration: String },
-    Exited { success: bool, detail: String },
+    Exited { termination: Termination },
 }
 
 #[tauri::command]
@@ -48,14 +50,18 @@ fn list_vms_inner(inner: &mut AppInner) -> Result<Vec<VmSummary>, AppError> {
             } => {
                 acceleration = Some(value);
             }
-            RuntimeCheck::Exited { success, detail } => {
+            RuntimeCheck::Exited { termination } => {
                 if let Some(config) = inner.store.vm_mut(&id) {
-                    config.state = if success {
-                        VmState::Stopped
-                    } else {
+                    config.state = if termination.is_failure() {
                         VmState::Error
+                    } else {
+                        VmState::Stopped
                     };
-                    config.last_error = if success { None } else { Some(detail) };
+                    config.last_error = if termination.is_failure() {
+                        Some(termination.summary)
+                    } else {
+                        None
+                    };
                     config.updated_at_unix = now;
                     changed = true;
                 }
@@ -163,12 +169,31 @@ pub async fn get_vm_console(app: AppHandle, id: String) -> Result<ConsoleSession
 
             match running.child.try_wait() {
                 Ok(None) => Ok(running.console.clone()),
-                Ok(Some(_)) => Err(VmError::Busy {
-                    id: id.clone(),
-                    message: "the QEMU process has exited, so its console is unavailable"
-                        .to_string(),
+                Ok(Some(status)) => {
+                    let termination = running.finish_unexpected(status);
+                    inner.runtime.remove(&id);
+
+                    if let Some(config) = inner.store.vm_mut(&id) {
+                        config.state = if termination.is_failure() {
+                            VmState::Error
+                        } else {
+                            VmState::Stopped
+                        };
+                        config.last_error = if termination.is_failure() {
+                            Some(termination.summary.clone())
+                        } else {
+                            None
+                        };
+                        config.updated_at_unix = vm::unix_now();
+                        let _ = inner.store.save();
+                    }
+
+                    Err(VmError::Busy {
+                        id: id.clone(),
+                        message: termination.summary,
+                    }
+                    .into())
                 }
-                .into()),
                 Err(error) => Err(VmError::Process(format!(
                     "could not inspect the QEMU process: {error}"
                 ))
@@ -178,6 +203,108 @@ pub async fn get_vm_console(app: AppHandle, id: String) -> Result<ConsoleSession
     })
     .await
     .map_err(|error| AppError::Task(format!("VM console task failed: {error}")))?
+}
+
+#[tauri::command]
+pub async fn get_vm_logs(
+    app: AppHandle,
+    id: String,
+    session_id: Option<String>,
+) -> Result<VmLogView, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let (logs_dir, vm_id, current_session) = state.with_inner(|inner| {
+            let vm = inner
+                .store
+                .vm(&id)
+                .ok_or_else(|| VmError::NotFound(id.clone()))?;
+            let logs_dir = inner.store.vms_dir().join(&vm.id).join("logs");
+            let current_session = inner
+                .runtime
+                .get(&id)
+                .map(|running| running.log_session_id().to_string());
+
+            Ok((logs_dir, vm.id.clone(), current_session))
+        })?;
+
+        log::read_view(
+            &logs_dir,
+            &vm_id,
+            current_session.as_deref(),
+            session_id.as_deref(),
+        )
+        .map_err(|error| {
+            VmError::Io(format!("the diagnostic log could not be read: {error}")).into()
+        })
+    })
+    .await
+    .map_err(|error| AppError::Task(format!("VM log task failed: {error}")))?
+}
+
+#[tauri::command]
+pub async fn export_vm_log(
+    app: AppHandle,
+    id: String,
+    session_id: Option<String>,
+) -> Result<Option<String>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let (log_path, suggested_name) = state.with_inner(|inner| {
+            let vm = inner
+                .store
+                .vm(&id)
+                .ok_or_else(|| VmError::NotFound(id.clone()))?;
+            let logs_dir = inner.store.vms_dir().join(&vm.id).join("logs");
+            let current_session = inner
+                .runtime
+                .get(&id)
+                .map(|running| running.log_session_id().to_string());
+            let sessions = log::list_sessions(&logs_dir, current_session.as_deref());
+            let selected =
+                log::select_session(&sessions, current_session.as_deref(), session_id.as_deref())
+                    .ok_or_else(|| {
+                    VmError::Io(
+                        "no diagnostic log session is available for this machine".to_string(),
+                    )
+                })?;
+            let suggested_name = format!(
+                "wave-vm-{}-{}.log",
+                sanitize_file_component(&vm.name),
+                selected.session_id
+            );
+
+            Ok((PathBuf::from(&selected.log_path), suggested_name))
+        })?;
+
+        let selected = app
+            .dialog()
+            .file()
+            .set_title("Export Wave VM diagnostic log")
+            .set_file_name(&suggested_name)
+            .add_filter("Log files", &["log", "txt"])
+            .blocking_save_file();
+
+        let Some(file) = selected else {
+            return Ok(None);
+        };
+
+        let destination = file.into_path().map_err(|error| {
+            AppError::Task(format!("the export path could not be read: {error}"))
+        })?;
+        let content = log::read_session_text(&log_path).map_err(|error| {
+            VmError::Io(format!("the diagnostic log could not be read: {error}"))
+        })?;
+        std::fs::write(&destination, content).map_err(|error| {
+            VmError::Io(format!(
+                "the diagnostic log could not be written to {}: {error}",
+                destination.display()
+            ))
+        })?;
+
+        Ok(Some(destination.display().to_string()))
+    })
+    .await
+    .map_err(|error| AppError::Task(format!("VM log export task failed: {error}")))?
 }
 
 fn create_vm_inner(
@@ -264,6 +391,7 @@ fn create_vm_inner(
         last_error: None,
         install_iso_path,
         boot_mode,
+        network: validated.network,
         created_at_unix: now,
         updated_at_unix: now,
     };
@@ -336,6 +464,7 @@ fn start_vm_inner(
     let launch = runtime::launch(
         &vm,
         Path::new(qemu),
+        host.qemu.version.as_deref(),
         &disk_path,
         kvm_usable,
         install_iso.as_deref().map(Path::new),
@@ -348,7 +477,12 @@ fn start_vm_inner(
 
             if let Err(error) = update_vm_state(inner, id, VmState::Running, None) {
                 if let Some(mut running) = inner.runtime.remove(id) {
-                    let _ = runtime::stop(&mut running);
+                    running.record(
+                        LogSeverity::Error,
+                        LogComponent::Vm,
+                        "QEMU started, but the running state could not be persisted; stopping it.",
+                    );
+                    let _ = runtime::stop(&mut running, StopReason::StartupFailure);
                 }
                 let _ = update_vm_state(
                     inner,
@@ -411,17 +545,13 @@ fn stop_vm_inner(inner: &mut AppInner, id: &str) -> Result<VmSummary, AppError> 
         return Err(error);
     }
 
-    match runtime::stop(&mut running) {
+    match runtime::stop(&mut running, StopReason::User) {
         Ok(outcome) => {
-            let last_error = outcome.status.and_then(|status| {
-                if status.success() {
-                    None
-                } else {
-                    Some(format!(
-                        "QEMU exited with status {status} while the machine was stopping."
-                    ))
-                }
-            });
+            let last_error = if outcome.termination.severity == LogSeverity::Info {
+                None
+            } else {
+                Some(outcome.termination.summary)
+            };
 
             update_vm_state(inner, id, VmState::Stopped, last_error)?;
 
@@ -432,11 +562,25 @@ fn stop_vm_inner(inner: &mut AppInner, id: &str) -> Result<VmSummary, AppError> 
             Ok(VmSummary::from_config(vm, VmState::Stopped, None))
         }
         Err(error) => {
-            if let Ok(None) = running.child.try_wait() {
-                inner.runtime.insert(id.to_string(), running);
+            let message = error.to_string();
+            running.record(
+                LogSeverity::Error,
+                LogComponent::Vm,
+                &format!("Shutdown failed: {message}"),
+            );
+
+            match running.child.try_wait() {
+                Ok(None) => {
+                    inner.runtime.insert(id.to_string(), running);
+                }
+                Ok(Some(status)) => {
+                    running.finish_unexpected(status);
+                }
+                Err(_) => {
+                    inner.runtime.insert(id.to_string(), running);
+                }
             }
 
-            let message = error.to_string();
             let _ = update_vm_state(inner, id, VmState::Error, Some(message));
             Err(error.into())
         }
@@ -444,7 +588,7 @@ fn stop_vm_inner(inner: &mut AppInner, id: &str) -> Result<VmSummary, AppError> 
 }
 
 fn check_runtime(inner: &mut AppInner, id: &str) -> RuntimeCheck {
-    let outcome = {
+    let termination = {
         let Some(running) = inner.runtime.get_mut(id) else {
             return RuntimeCheck::NotRunning;
         };
@@ -455,25 +599,24 @@ fn check_runtime(inner: &mut AppInner, id: &str) -> RuntimeCheck {
                     acceleration: running.acceleration.clone(),
                 };
             }
-            Ok(Some(status)) => Some((
-                status.success(),
-                format!(
-                    "QEMU exited with status {status}. See {}",
-                    running.log_path.display()
-                ),
-            )),
-            Err(error) => Some((
-                false,
-                format!("Could not inspect the QEMU process: {error}"),
-            )),
+            Ok(Some(status)) => Some(running.finish_unexpected(status)),
+            Err(error) => {
+                running.record(
+                    LogSeverity::Warn,
+                    LogComponent::Vm,
+                    &format!("Could not inspect the QEMU process: {error}"),
+                );
+                return RuntimeCheck::Running {
+                    acceleration: running.acceleration.clone(),
+                };
+            }
         }
     };
 
     inner.runtime.remove(id);
 
-    let (success, detail) =
-        outcome.expect("a runtime outcome exists when the process is not running");
-    RuntimeCheck::Exited { success, detail }
+    let termination = termination.expect("a termination exists when the process is not running");
+    RuntimeCheck::Exited { termination }
 }
 
 fn update_vm_state(
@@ -555,4 +698,28 @@ fn generate_vm_id() -> String {
     let counter = NEXT_VM_ID.fetch_add(1, Ordering::Relaxed);
 
     format!("vm-{nanos:x}-{:x}-{counter:x}", process::id())
+}
+
+fn sanitize_file_component(value: &str) -> String {
+    let mut sanitized = String::new();
+
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            sanitized.push(character.to_ascii_lowercase());
+        } else if character.is_whitespace() || matches!(character, '-' | '_' | '.') {
+            sanitized.push('-');
+        }
+
+        if sanitized.len() >= 40 {
+            break;
+        }
+    }
+
+    let trimmed = sanitized.trim_matches('-').to_string();
+
+    if trimmed.is_empty() {
+        "machine".to_string()
+    } else {
+        trimmed
+    }
 }

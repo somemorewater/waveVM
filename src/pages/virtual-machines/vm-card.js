@@ -6,6 +6,8 @@ import {
   bootModeLabel,
   fileName,
   formatCount,
+  networkAdapterLabel,
+  networkModeLabel,
   vmStateLabel,
   vmStateTone,
 } from "../../utils/format.js";
@@ -13,6 +15,11 @@ import { createVmActionButtons } from "./vm-action-buttons.js";
 
 export function createVmCard({ vm, busyAction = null, onStart, onStop }) {
   const state = vm.state || "error";
+  const network = vm.network || {
+    enabled: true,
+    mode: "nat",
+    adapter: "virtio",
+  };
 
   const header = element("div", {
     className: "vm-card-header",
@@ -42,6 +49,14 @@ export function createVmCard({ vm, busyAction = null, onStart, onStop }) {
       spec("Memory", `${formatCount(vm.memoryMib)} MiB`),
       spec("Virtual CPUs", formatCount(vm.vcpus)),
       spec("Disk", `${formatCount(vm.diskSizeGib)} GiB`),
+      spec(
+        "Networking",
+        network.enabled
+          ? `${networkModeLabel(network.mode)} · ${networkAdapterLabel(
+              network.adapter,
+            )}`
+          : "Disabled",
+      ),
       spec(
         "Acceleration",
         vm.acceleration ? accelerationLabel(vm.acceleration) : "Not running",
@@ -81,11 +96,23 @@ export function createVmCard({ vm, busyAction = null, onStart, onStop }) {
   const footer = element("div", {
     className: "vm-card-footer",
     children: [
-      buttonLink({
-        label: "Details",
-        href: `#/machines/${encodeURIComponent(vm.id)}`,
-        variant: "ghost",
-        small: true,
+      element("div", {
+        className: "vm-card-links",
+        children: [
+          buttonLink({
+            label: "Details",
+            href: `#/machines/${encodeURIComponent(vm.id)}`,
+            variant: "ghost",
+            small: true,
+          }),
+          buttonLink({
+            label: "Logs",
+            href: `#/machines/${encodeURIComponent(vm.id)}/logs`,
+            iconName: "log",
+            variant: "ghost",
+            small: true,
+          }),
+        ],
       }),
       element("div", {
         className: "vm-card-actions",

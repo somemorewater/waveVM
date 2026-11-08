@@ -486,6 +486,355 @@ body.console-immersive .alert-stack:not(:empty) {
   }
 }
 
+.vm-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.vm-logs-page {
+  min-width: 0;
+}
+
+.vm-logs-content {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+
+.vm-logs-content[hidden] {
+  display: none;
+}
+
+.vm-logs-state {
+  min-width: 0;
+}
+
+.vm-logs-state:empty {
+  display: none;
+}
+
+.vm-logs-select {
+  width: 100%;
+  min-width: 230px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.vm-logs-select:hover:not(:disabled),
+.vm-logs-filter-select:hover:not(:disabled),
+.vm-logs-search:hover:not(:disabled) {
+  border-color: var(--blue-600);
+}
+
+.vm-logs-select:focus,
+.vm-logs-filter-select:focus,
+.vm-logs-search:focus {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-color: var(--blue-600);
+}
+
+.vm-logs-summary {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.vm-logs-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.vm-logs-summary-note-text {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vm-logs-summary-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent-600);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.vm-logs-summary-note.is-warn {
+  border-left-color: var(--amber-500);
+  background: var(--amber-100);
+  color: var(--amber-700);
+}
+
+.vm-logs-summary-note.is-error {
+  border-left-color: var(--red-500);
+  background: var(--red-100);
+  color: var(--red-700);
+}
+
+.vm-logs-summary-help {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vm-logs-filters {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(120px, 1fr))
+    minmax(180px, 1.4fr)
+    auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.vm-logs-filter {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.vm-logs-filter-action {
+  align-self: end;
+}
+
+.vm-logs-filter-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vm-logs-filter-select,
+.vm-logs-search {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.vm-logs-search::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.vm-logs-list-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vm-logs-count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vm-logs-entries {
+  display: flex;
+  max-height: clamp(320px, 52vh, 720px);
+  min-width: 0;
+  flex-direction: column;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.vm-log-entry {
+  display: grid;
+  grid-template-columns: 92px 62px 82px 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.vm-log-entry:last-child {
+  border-bottom: 0;
+}
+
+.vm-log-entry[data-source="application"] {
+  border-left-color: var(--accent-600);
+}
+
+.vm-log-entry[data-severity="warn"] {
+  background: var(--amber-100);
+}
+
+.vm-log-entry[data-severity="error"] {
+  background: var(--red-100);
+}
+
+.vm-log-time {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.vm-log-level {
+  justify-self: start;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.vm-log-level[data-tone="warn"] {
+  border: 1px solid var(--tone-warn-border);
+  background: var(--surface);
+  color: var(--amber-700);
+}
+
+.vm-log-level[data-tone="error"] {
+  border: 1px solid var(--tone-error-border);
+  background: var(--surface);
+  color: var(--red-700);
+}
+
+.vm-log-component {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.vm-log-source {
+  justify-self: start;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.vm-log-source[data-source="application"] {
+  color: var(--accent-700);
+}
+
+.vm-log-source[data-source="qemu_stderr"] {
+  color: var(--red-700);
+}
+
+.vm-log-source[data-source="qmp_event"] {
+  color: var(--blue-700);
+}
+
+.vm-log-message {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.vm-log-entry.is-raw .vm-log-message {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.vm-logs-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 40px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.vm-logs-empty strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.vm-logs-empty p {
+  max-width: 520px;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .vm-logs-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vm-logs-filter-action {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .vm-log-entry {
+    grid-template-columns: 78px 58px minmax(0, 1fr);
+    grid-template-areas:
+      "time level source"
+      "message message message";
+    gap: 5px 10px;
+  }
+
+  .vm-log-time {
+    grid-area: time;
+  }
+
+  .vm-log-level {
+    grid-area: level;
+  }
+
+  .vm-log-component {
+    display: none;
+  }
+
+  .vm-log-source {
+    grid-area: source;
+  }
+
+  .vm-log-message {
+    grid-area: message;
+  }
+}
+
+@media (max-width: 640px) {
+  .vm-logs-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .vm-logs-select {
+    min-width: 0;
+  }
+}
+
 @media (max-width: 1000px) {
   .vm-grid {
     grid-template-columns: 1fr;

@@ -20,6 +20,14 @@ export function getVmConsole(id) {
   return invoke("get_vm_console", { id });
 }
 
+export function getVmLogs(id, sessionId = null) {
+  return invoke("get_vm_logs", { id, sessionId });
+}
+
+export function exportVmLog(id, sessionId = null) {
+  return invoke("export_vm_log", { id, sessionId });
+}
+
 export function pickIsoFile() {
   return invoke("pick_iso_file");
 }
@@ -30,4 +38,8 @@ export function setVmInstallIso(id, path) {
 
 export function setVmBootMode(id, bootMode) {
   return invoke("set_vm_boot_mode", { id, bootMode });
+}
+
+export function setVmNetworkEnabled(id, enabled) {
+  return invoke("set_vm_network_enabled", { id, enabled });
 }

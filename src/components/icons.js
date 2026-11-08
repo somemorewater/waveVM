@@ -45,6 +45,8 @@ const ICONS = {
     '<path d="M9 4v5H4M15 4v5h5M20 15h-5v5M4 15h5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
   mouse:
     '<rect x="7" y="3" width="10" height="18" rx="5" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  log:
+    '<path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3.5V8h4M8.5 12h7M8.5 15.5h7M8.5 8.5h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
 };
 
 export function icon(name, size = 18, className = "") {

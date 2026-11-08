@@ -20,6 +20,12 @@ const ROUTES = [
     params: ["id"],
   },
   {
+    id: "vm-logs",
+    nav: "machines",
+    pattern: /^\/machines\/([^/]+)\/logs\/?$/,
+    params: ["id"],
+  },
+  {
     id: "vm-details",
     nav: "machines",
     pattern: /^\/machines\/([^/]+)\/?$/,

@@ -648,6 +648,29 @@
   line-height: 1.5;
 }
 
+.checkbox-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.checkbox-control input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--accent-600);
+}
+
+.checkbox-control input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
 .iso-picker {
   display: flex;
   flex-wrap: wrap;

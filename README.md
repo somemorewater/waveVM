@@ -6,9 +6,9 @@ Wave VM is a free, open-source desktop application for creating and managing vir
 
 ## Current status
 
-This is **Milestone 4: Local ISO Installation Support**. It builds on the real VM lifecycle with local ISO selection, persistent installation media, read-only CD/DVD attachment for installer boot, and an explicit switch back to disk boot after installation.
+This is **Milestone 5: Automatic VM Networking**. It builds on the real VM lifecycle and local ISO support with persistent NAT networking, automatic guest DHCP/DNS through QEMU user-mode networking, and a per-machine networking toggle.
 
-Wave VM can boot a user-supplied local ISO and display the real installer through the existing console. It does not download images, provide an online OS catalogue, or detect installation completion. Image downloads, networking, USB passthrough, and snapshots remain outside this milestone. A running machine can be opened in the console view, which displays the actual guest framebuffer over loopback-only QEMU VNC.
+Wave VM can boot a user-supplied local ISO, display the real installer through the existing console, and give guests outbound internet access through the host's connection. It does not download images, provide an online OS catalogue, detect installation completion, or configure bridged or inbound networking. Image downloads, bridged networking, USB passthrough, and snapshots remain outside this milestone. A running machine can be opened in the console view, which displays the actual guest framebuffer over loopback-only QEMU VNC.
 
 ## What works
 
@@ -20,15 +20,18 @@ Wave VM can boot a user-supplied local ISO and display the real installer throug
 - Creating VM definitions with validated names, memory, virtual CPU counts, guest architecture, and disk size.
 - Creating a thin-provisioned QCOW2 disk with `qemu-img`. Existing disks are never overwritten.
 - Starting a real QEMU process with the configured resources, KVM when verified usable, and a TCG fallback.
-- QMP lifecycle control over a private Unix socket. The guest console uses QEMU VNC bound to `127.0.0.1` with a per-run password; no public QMP endpoint or guest network device is exposed.
+- QMP lifecycle control over a private Unix socket. The guest console uses QEMU VNC bound to `127.0.0.1` with a per-run password; no public QMP endpoint is exposed, and guest networking uses QEMU user-mode NAT rather than a host bridge.
 - An interactive guest console using QEMU's WebSocket VNC transport and bundled noVNC 1.7.0. The WebSocket port is discovered through QMP, and the console password is generated per run and kept in memory only.
 - An immersive console mode that uses the native Tauri window, hides the application shell, and rescales the guest display through noVNC. F11 or the on-screen fullscreen control toggles fullscreen. Mouse capture uses the webview Pointer Lock API after an explicit control is activated; Esc releases capture and returns keyboard focus to the host.
 - Stopping a VM with `system_powerdown`, a QMP `quit` fallback, and bounded process termination fallbacks.
 - Tracking the child process, preventing duplicate launches, detecting unexpected exits through polling, and reconciling persisted state.
+- Timestamped per-session diagnostic logs under `vms/<machine-id>/logs/`, capturing application events, QEMU stdout and stderr, QMP events, and the termination outcome with exit code or signal where available. The log view supports session selection, severity/component/source/message filtering, copying the filtered view, and exporting the complete session. QEMU `GUEST_PANICKED` events are reported as a guest panic.
 - Selecting an existing local ISO through the native Tauri file dialog, with Rust-side validation of the absolute path, regular-file type, `.iso` extension, and readability. The ISO is never copied, modified, or deleted.
 - Attaching, replacing, or detaching installation media only while a machine is stopped. Installer boot attaches the ISO as a read-only CD/DVD and boots it first; disk boot starts the QCOW2 disk without the installer.
-- Versioned `config.json` stored in the platform application data directory, written atomically with restrictive permissions on Unix. Schema version 3 stores VM definitions, optional installation media, and the boot mode; version 2 configurations migrate automatically.
-- A `vms/` directory containing each machine's disk and QEMU log.
+- NAT networking enabled by default for new machines, using QEMU user-mode networking (`-netdev user`) and a VirtIO Ethernet adapter. QEMU provides DHCP and DNS forwarding so common Linux guests obtain network configuration automatically without a bridge, TAP device, or host networking change.
+- Per-machine networking can be enabled or disabled while the machine is stopped. Disabling networking removes the virtual adapter on the next start. Bridged, isolated, and custom modes are not selectable.
+- Versioned `config.json` stored in the platform application data directory, written atomically with restrictive permissions on Unix. Schema version 4 stores VM definitions, optional installation media, the boot mode, and networking settings; version 0 through 3 configurations migrate automatically, and older machines receive enabled NAT with a VirtIO adapter.
+- A `vms/` directory containing each machine's disk and per-session diagnostic logs.
 
 ## Brand assets
 
@@ -43,7 +46,7 @@ or depend on the website repository at build time or runtime.
 - Rust stable and Cargo.
 - Node.js 20+ and npm for the Tauri CLI.
 - Tauri 2 Linux prerequisites, including WebKitGTK 4.1, GTK 3, and libsoup 3. On Arch Linux the relevant packages are `webkit2gtk-4.1`, `gtk3`, and `libsoup3`.
-- QEMU and `qemu-img` for VM disk creation and process lifecycle operations. The console requires a QEMU build with WebSocket VNC support; this environment was verified with QEMU 11.1.2.
+- QEMU and `qemu-img` for VM disk creation and process lifecycle operations. The console requires a QEMU build with WebSocket VNC support, and NAT networking requires user-mode networking (`-netdev user`, provided by SLIRP); this environment was verified with QEMU 11.1.2.
 - Optional: an accessible `/dev/kvm` device for KVM acceleration. Without it, QEMU uses software emulation (TCG).
 
 Wave VM never requires root. It does not install drivers, change group membership, or modify host configuration.
@@ -79,13 +82,13 @@ Tauri resolves the application data directory from the bundle identifier `com.wa
 The application creates:
 
 ```text
-config.json             # versioned application configuration (schema v3)
+config.json             # versioned application configuration (schema v4)
 vms/<machine-id>/       # one directory per machine
   disk.qcow2            # QCOW2 virtual disk
-  qemu.log              # latest QEMU run log
+  logs/                 # per-session diagnostic logs and metadata
 ```
 
-Configuration writes use a temporary file in the same directory followed by an atomic rename. The `vms/` directory and VM disks are never removed automatically by this build.
+Configuration writes use a temporary file in the same directory followed by an atomic rename. The `vms/` directory and VM disks are never removed automatically by this build. Diagnostic logs retain the latest 20 sessions per machine.
 
 ## Architecture
 
@@ -96,7 +99,7 @@ src/
   state/                 Shared host, application, and machine state
   services/              Tauri command wrappers and local preferences
   components/            Persistent shell and reusable UI
-  pages/                 Dashboard, machines, storage, media, settings
+  pages/                 Dashboard, machines, logs, storage, media, settings
   styles/                Tokens, global/layout/components, page styles
   assets/brand/          Local Wave VM brand SVGs
   vendor/novnc/          Bundled noVNC 1.7.0 client and licenses
@@ -106,12 +109,12 @@ src-tauri/src/
   host/                  Host diagnostics, memory/storage, KVM probe
   qemu/                  Executable discovery, safe version probing
   qmp/                   Minimal QMP client over a local Unix socket
-  vm/                    VM models, validation, disk creation, process lifecycle
+  vm/                    VM models, validation, disk creation, media, networking, logs, process lifecycle
   error.rs               Shared serialized application errors
   state.rs               Application state, tracked QEMU processes, exit cleanup
 ```
 
-The shell and sidebar remain mounted while page modules render into the main outlet. Routes use local hash paths such as `#/dashboard`, `#/machines`, `#/machines/:id`, `#/machines/:id/console`, `#/storage`, `#/media`, and `#/settings`, so browser-style back and forward navigation works without a server.
+The shell and sidebar remain mounted while page modules render into the main outlet. Routes use local hash paths such as `#/dashboard`, `#/machines`, `#/machines/:id`, `#/machines/:id/console`, `#/machines/:id/logs`, `#/storage`, `#/media`, and `#/settings`, so browser-style back and forward navigation works without a server.
 
 The Rust backend owns host detection, VM validation, persistence, disk creation, and process lifecycle. The frontend only renders the structured results and handles interaction. Because the frontend is static and has no bundler, it calls the registered commands through Tauri's global `window.__TAURI__.core.invoke` bridge; the capability is scoped to the main window.
 
@@ -123,11 +126,15 @@ The Rust backend owns host detection, VM validation, persistence, disk creation,
 - ISO paths containing commas, newlines, or carriage returns are rejected because they cannot be passed safely through QEMU's option parser.
 - The virtual disk is attached with virtio-blk. An installer without a virtio storage driver, including some Windows installers, may not see the disk unless those drivers are supplied by the guest image or an additional driver medium. This milestone does not provide driver media.
 - QEMU runs with `-no-reboot`, so a guest-requested restart exits the process instead of rebooting automatically. Start the machine again after changing boot mode.
-- Image downloads, networking, USB passthrough, and snapshots are not implemented.
+- NAT networking uses the `virtio-net-pci` adapter. Guests without a VirtIO network driver, including some older or minimal operating systems, may not detect the adapter; this build does not offer an alternative adapter model.
+- NAT networking supports outbound connections only. Inbound connections from the host or external network require port forwarding, which is not implemented. Bridged, isolated, and custom networking are planned but not available.
+- QEMU user-mode networking does not verify guest connectivity. Guests keep their DHCP configuration when the host temporarily disconnects and may recover when the host reconnects, but automatic recovery is not guaranteed by QEMU or the host network stack.
+- Image downloads, USB passthrough, and snapshots are not implemented.
 - The console depends on QEMU WebSocket VNC support and is available only while the machine is running. It is bound to loopback and protected by a per-run password. Fullscreen and pointer lock depend on the desktop webview. While pointer lock is active, the browser reserves Escape and routes pointer clicks to the guest, so Esc is the reliable release path; the visible mouse control shows the captured state and becomes clickable once capture ends. After release, click the guest to resume input and Escape will reach the guest again. Ctrl+Alt is not used because it is a guest keyboard combination. Pointer accuracy depends on the guest's configured pointing device.
 - KVM acceleration is used only when the probe verifies `/dev/kvm`; otherwise QEMU uses software emulation (TCG) and may be slow.
 - There is no UI for editing or deleting machines. Existing disks and VM directories are preserved.
-- Normal application exit stops tracked QEMU processes. If the desktop process is force-killed, cleanup guarantees do not apply to an already running child process.
+- Normal application exit stops tracked QEMU processes. If the desktop process is force-killed, cleanup guarantees do not apply to an already running child process, and the running diagnostic session may not receive a final outcome.
+- Diagnostic logs observe the QEMU process and QMP events. A guest-internal failure is reported only when QEMU emits a corresponding event, such as `GUEST_PANICKED`; there is no in-guest agent.
 - Windows and macOS host behavior has not been verified in this environment.
 - No installer or packaged release has been produced.
 
